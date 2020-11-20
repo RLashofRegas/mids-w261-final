@@ -536,12 +536,12 @@ airlines.createOrReplaceTempView("airlines")
 # COMMAND ----------
 
 # Bin departure times
-splits = [400,800,1200,1600,2000,2400]
-bucketizer = Bucketizer(splits=splits, inputCol="crs_dep_time", outputCol="CRS_DEP_TIME_Daypart")
-airlines = bucketizer.transform(airlines).cache()
+## splits = [400,800,1200,1600,2000,2400]
+## bucketizer = Bucketizer(splits=splits, inputCol="crs_dep_time", outputCol="CRS_DEP_TIME_Daypart")
+## airlines = bucketizer.transform(airlines).cache()
 
 # replace temp view
-airlines.createOrReplaceTempView("airlines")
+## airlines.createOrReplaceTempView("airlines")
 
 # COMMAND ----------
 
