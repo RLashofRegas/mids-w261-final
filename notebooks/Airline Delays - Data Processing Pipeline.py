@@ -16,11 +16,13 @@
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType, NullType, ShortType, DateType, BooleanType, BinaryType
 from pyspark.sql import SQLContext
 from pyspark.sql import types
-from pyspark.sql.functions import col, lag, udf
+from pyspark.sql.functions import col, lag, udf, to_timestamp, monotonically_increasing_id
+import pyspark.sql.functions as f
 from pyspark.sql.window import Window
 from pandas.tseries.holiday import USFederalHolidayCalendar
 from datetime import datetime, timedelta
 from pyspark.ml.feature import IndexToString, StringIndexer, OneHotEncoder, VectorAssembler, Bucketizer, StandardScaler
+import pandas as pd
 
 # COMMAND ----------
 
@@ -57,10 +59,6 @@ city_timezone = spark.read.option("header", "false").csv(city_timezone_path) # t
 
 # COMMAND ----------
 
-dbutils.fs.ls(final_project_path)
-
-# COMMAND ----------
-
 # MAGIC %md
 # MAGIC ### Data Transformations
 
@@ -84,7 +82,7 @@ def split_city_name(city_state):
   return shortened_city + ',' + state
 
 #convert function to udf
-split_city_name_udf = f.udf(split_city_name, StringType())
+split_city_name_udf = udf(split_city_name, StringType())
 
 # add new columns to airlines dataset
 airlines = airlines \
@@ -138,8 +136,10 @@ SELECT
   tail_num,
   origin_airport_id,
   origin,
+  origin_city_name,
   dest_airport_id,
   dest,
+  dest_city_name,
   crs_dep_time,
   dep_time,
   dep_delay,
@@ -153,6 +153,7 @@ SELECT
   nas_delay,
   security_delay,
   late_aircraft_delay,
+  taxi_out,
   td.timezone AS dest_timezone,
   to.timezone AS origin_timezone,
   TO_UTC_TIMESTAMP(DATE_TRUNC('hour', TO_TIMESTAMP(CONCAT(fl_date, ' ', LPAD(crs_dep_time, 4, '0')), 'yyyy-MM-dd HHmm')), to.timezone) AS truncated_crs_dep_time_utc,
@@ -243,7 +244,8 @@ SELECT
   wr.dew,
   wr.slp,
   wr.airport_code,
-  wr.hour
+  wr.hour,
+  wr.aw1
 FROM weather_ranked AS wr
 WHERE
   wr.rank = 1
@@ -369,6 +371,8 @@ weather = slp_parse(weather)
 weather = present_weather_parse(weather)
 weather = weather.cache()
 
+weather.createOrReplaceTempView("weather")
+
 # COMMAND ----------
 
 # MAGIC %md
@@ -459,7 +463,7 @@ airlines.createOrReplaceTempView("airlines")
 
 # COMMAND ----------
 
-def chain_delay_feature_engineering(airline_df)
+def chain_delay_feature_engineering(airline_df):
   '''Takes airline df with created columns CRS_DEP_TIME_UTC, CRS_DEP_MINUS_TWO_FIFTEEN_UTC and returns new airline df with 5 added columns:
   dep_time_diff_one_flight_before: time between departure of current flight and previous flight (in seconds)
   dep_time_diff_two_flights_before: time between departure of current flight and  flight two previous (in seconds)
@@ -475,15 +479,15 @@ def chain_delay_feature_engineering(airline_df)
   """)
   
   #Store new df with limited number of ordered columns that we can use to window 
-  airlines_aircraft_tracking = airlines_non_cancelled[["tail_num","fl_date","ORIGIN_CITY_NAME", "DEST_CITY_NAME", "DEP_DEL15", "CRS_DEP_TIME_UTC", "CRS_DEP_MINUS_TWO_FIFTEEN_UTC"]].orderBy("tail_num","fl_date", "CRS_DEP_TIME_UTC")
+  airlines_aircraft_tracking = airlines_non_cancelled[["tail_num","fl_date","origin_city_name", "dest_city_name", "dep_del15", "crs_dep_time_utc", "crs_dep_minus_two_fifteen_utc"]].orderBy("tail_num","fl_date", "dest_city_name")
   
   #This section is related to windowing so that we can pull information from previous flight and flight 2 before current flight. Windowing will only pull for the same tail number
-  w = Window.partitionBy("tail_num").orderBy("CRS_DEP_TIME_UTC")
+  w = Window.partitionBy("tail_num").orderBy("dest_city_name")
 
-  diff = col("CRS_DEP_TIME_UTC").cast("long") - lag("CRS_DEP_TIME_UTC", 1).over(w).cast("long")
-  diff2 = col("CRS_DEP_TIME_UTC").cast("long") - lag("CRS_DEP_TIME_UTC", 2).over(w).cast("long")
-  delay_one_before = lag("DEP_DEL15", 1).over(w)
-  delay_two_before = lag("DEP_DEL15", 2).over(w)
+  diff = col("dest_city_name").cast("long") - lag("dest_city_name", 1).over(w).cast("long")
+  diff2 = col("dest_city_name").cast("long") - lag("dest_city_name", 2).over(w).cast("long")
+  delay_one_before = lag("dep_del15", 1).over(w)
+  delay_two_before = lag("dep_del15", 2).over(w)
 
   airlines_aircraft_tracking_diff = airlines_aircraft_tracking.withColumn("dep_time_diff_one_flight_before", diff)\
                                   .withColumn("dep_time_diff_two_flights_before", diff2)\
@@ -508,17 +512,15 @@ def chain_delay_feature_engineering(airline_df)
 
   chain_delay_analysis_udf = f.udf(chain_delay_analysis)
 
-  airlines_aircraft_tracking_diff_for_join = airlines_aircraft_tracking_diff.withColumn("PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", chain_delay_analysis_udf('dep_time_diff_one_flight_before', 'dep_time_diff_two_flights_before',\
+  airlines_aircraft_tracking_diff_for_join = airlines_aircraft_tracking_diff.withColumn("PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", chain_delay_analysis_udf('dep_time_diff_one_flight_before', 'dep_time_diff_two_flights_before',
                            'delay_one_before', 'delay_two_before'))
   
   airline_df_with_id = airline_df.withColumn("id", monotonically_increasing_id())
   
-  airlines_chain_delays = airline_df_with_id.join(airlines_aircraft_tracking_diff_for_join,
-                                                 (airline_df_with_id.TAIL_NUM == airlines_aircraft_tracking_diff_for_join.tail_num) &\
-                                                 (airline_df_with_id.CRS_DEP_TIME_UTC == airlines_aircraft_tracking_diff_for_join.CRS_DEP_TIME_UTC) &\
-                                                 (airline_df_with_id.ORIGIN_CITY_NAME == airlines_aircraft_tracking_diff_for_join.ORIGIN_CITY_NAME) &\
-                                                 (airline_df_with_id.DEST_CITY_NAME == airlines_aircraft_tracking_diff_for_join.DEST_CITY_NAME)
-                                                                                 , 'left_outer')
+  join_columns = ["tail_num","fl_date","origin_city_name", "dest_city_name", "crs_dep_time_utc"]
+  
+  airlines_chain_delays = airline_df_with_id.alias("a").join(airlines_aircraft_tracking_diff_for_join.alias("j"), join_columns, 'left_outer') \
+                            .select('a.year', 'a.quarter', 'a.month', 'a.day_of_week', 'a.fl_date', 'a.op_unique_carrier', 'a.tail_num', 'a.origin_airport_id', 'a.origin', 'a.origin_city_name', 'a.dest_airport_id', 'a.dest', 'a.dest_city_name', 'a.crs_dep_time', 'a.dep_time', 'a.dep_delay', 'a.dep_del15', 'a.cancelled', 'a.diverted', 'a.short_dest_city_name', 'a.short_orig_city_name', 'a.carrier_delay', 'a.weather_delay', 'a.nas_delay', 'a.security_delay', 'a.late_aircraft_delay', 'a.taxi_out', 'a.dest_timezone', 'a.origin_timezone', 'a.truncated_crs_dep_time_utc', 'a.truncated_crs_dep_minus_three_utc', 'a.crs_dep_time_utc', 'a.crs_dep_minus_two_fifteen_utc', 'a.Holiday', 'a.id', 'j.dep_time_diff_one_flight_before', 'j.dep_time_diff_two_flights_before', 'j.delay_one_before', 'j.delay_two_before', 'j.PREVIOUS_FLIGHT_DELAYED_FOR_MODELS')
   
   #Drop duplicates created during join. Is there a better way?
   airlines_chain_delays_no_dups = airlines_chain_delays.dropDuplicates(['id'])
@@ -535,8 +537,8 @@ airlines.createOrReplaceTempView("airlines")
 
 # Bin departure times
 splits = [400,800,1200,1600,2000,2400]
-bucketizer = Bucketizer(splits=splits, inputCol="CRS_DEP_TIME", outputCol="CRS_DEP_TIME_Daypart")
-airlines = bucketizer.transform(airlines)
+bucketizer = Bucketizer(splits=splits, inputCol="crs_dep_time", outputCol="CRS_DEP_TIME_Daypart")
+airlines = bucketizer.transform(airlines).cache()
 
 # replace temp view
 airlines.createOrReplaceTempView("airlines")
@@ -588,6 +590,8 @@ SELECT
   wo.DEW_dew_point_temp AS origin_DEW_dew_point_temp,
   wo.DEW_dew_point_temp_quality AS origin_DEW_dew_point_temp_quality,
   wo.SLP_sea_level_pressure_quality AS origin_SLP_sea_level_pressure_quality,
+  wo.aw1_automated_atmospheric_condition AS origin_aw1_automated_atmospheric_condition,
+  wo.aw1_quality_automated_atmospheric_condition AS origin_aw1_quality_automated_atmospheric_condition,
   wd.WND_direction_quality AS dest_WND_direction_quality,
   wd.WND_type_code AS dest_WND_type_code,
   wd.WND_speed_rate AS dest_WND_speed_rate,
@@ -603,7 +607,9 @@ SELECT
   wd.TMP_air_temperature_quality AS dest_TMP_air_temperature_quality,
   wd.DEW_dew_point_temp AS dest_DEW_dew_point_temp,
   wd.DEW_dew_point_temp_quality AS dest_DEW_dew_point_temp_quality,
-  wd.SLP_sea_level_pressure_quality AS dest_SLP_sea_level_pressure_quality
+  wd.SLP_sea_level_pressure_quality AS dest_SLP_sea_level_pressure_quality,
+  wd.aw1_automated_atmospheric_condition AS dest_aw1_automated_atmospheric_condition,
+  wd.aw1_quality_automated_atmospheric_condition AS dest_aw1_quality_automated_atmospheric_condition
 FROM airlines AS f
 LEFT JOIN weather AS wo ON
   f.origin = wo.airport_code
