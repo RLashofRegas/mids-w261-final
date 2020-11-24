@@ -713,6 +713,6 @@ test_one_hot = model.transform(test_one_hot)
 
 # COMMAND ----------
 
-train_set.write.format("parquet").mode("overwrite").save(train_data_output_path_one_hot)
-val_set.write.format("parquet").mode("overwrite").save(validation_data_output_path_one_hot)
-test_set.write.format("parquet").mode("overwrite").save(test_data_output_path_one_hot)
+train_one_hot.write.format("parquet").mode("overwrite").save(train_data_output_path_one_hot)
+val_one_hot.write.format("parquet").mode("overwrite").save(validation_data_output_path_one_hot)
+test_one_hot.write.format("parquet").mode("overwrite").save(test_data_output_path_one_hot)
