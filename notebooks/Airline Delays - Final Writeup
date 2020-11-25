@@ -1,0 +1,52 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # Airline Delays
+# MAGIC ## MIDS W261 Final Project
+# MAGIC #### *Laura Herman, Michael Hubert, Robin Lashof-Regas, and Steven Leung*
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Question Formulation and Prior Research
+# MAGIC According to the Federal Aviation Administration (FAA) flight delays cost airlines and passengers over twenty eight billion dollars in 2018 [NEED SOURCE]. For airlines this cost can be attributed to (NOT SURE ABOUT THESE REASONS) fuel(?), employee overtime, maintenance(?), loss of trust in the airline, and rebooking cost. For passengers this cost can be attributed to loss of productivity due to missed time at work, lost wages due to missing work, and overtime wages due to additional travel time. Some of these costs can be greatly reduced or eliminated if an airline could know in advance whether or not a given flight will be delayed. The purpose of this project is to predict whether a given flight will be delayed by 15 minutes or more, at least 2 hours before the scheduled departure. 
+# MAGIC 
+# MAGIC To accomplish this task we use data provided by the U.S. Department of Transportation (DOT) for passenger flight data between 2015 and 2019. We also augment this dataset with weather data from US weather stations provided by the National Oceanic and Atmospheric Administration over the same time period. We treat this problem as a classification problem with the goal to predict the value of the outcome variable labeled as *DEP_DEL15* in the DOT airlines dataset which indicates whether a flight was delayed by at least 15 minutes (aligning with the FAA definition of a delayed flight [NEED SOURCE]). As we perform our analysis our primary evaluation metric will be recall as the main business driver is to find as many of the delayed flights as possible as the impact is relatively less if we inacurately predict that an on-time flight will be delayed. That said, we want to make sure our model is not overfitting to this metric (for example predicting every flight as delayed), so we will also incorporate accuracy into our evaluation metrics.
+# MAGIC 
+# MAGIC This is not a novel research question. Most studies incorporate airline and weather data as we have, while more use novel approaches to data collection such as IoT sensors (FOR? - NEED SOURCE). The most common models used for this task include Random Forest, K-Nearest Neighbors, and Neural Networks. We explore some of these options in the sections that follow. The best results we were able to find on this topic were those from L. Belcastro et al. where they achieved 86% accuracy with 87% recall using a Random Forest model. One of the key takeaways from this study was their method of categorizing delays as "Chain Delays" (delays caused by previous delays such as late-arriving aircraft) and "Root Cause Delays" (cause of original delay such as weather or maintenance). The following plot from the same study breaks down these delays:
+# MAGIC 
+# MAGIC [INSERT IMAGE VIA METHOD SUCH AS https://forums.databricks.com/questions/29012/how-to-show-an-image-in-a-notebook-using-html.html]
+# MAGIC 
+# MAGIC In our work we build on this concept, providing a number of novel features in order to capture these concepts to influence our models. We begin with some exploratory data analysis where we justify our feature engineering/selection and verify some of our assumptions and processing of the incoming data. Next we discuss the feature engineering we performed to capture the chain and root cause delay concepts mentioned above. Following this we show a few of the base models we tried and motivate our decision to focus on Random Forest. After this we deep dive into our model as well as some of the mathematical formulation of Random Forest itself. Finally, we discuss some key takeaways from this work, next steps, and briefly discuss how the analysis presented showcases what we've learned in the W261 course.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Exploratory Data Analysis
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Feature Engineering
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Algorithm Exploration
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Algorithm Implementation
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Conclusions
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Course Concepts
+
+# COMMAND ----------
+
