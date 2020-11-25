@@ -259,6 +259,8 @@ weather = sqlContext.sql("SELECT * FROM weather").cache()
 
 # COMMAND ----------
 
+## **Updated**
+
 #Source: https://www.ncei.noaa.gov/data/global-hourly/doc/isd-format-document.pdf
 
 #Functions to Mandatory Weather Data - Parse Weather Variables WND - WIND-OBSERVATION, CIG - SKY-CONDITION-OBSERVATION, VIS - VISIBILITY-OBSERVATION, TMP - AIR-TEMPERATURE-OBSERVATION,  DEW - DEW POINT, SLP = Sea Level AIR-PRESSURE-OBSERVATION
@@ -266,8 +268,9 @@ def wind_parse(df,column_name='WND'):
   split_col = f.split(df[column_name], ',')
   
   #direction angle  999 = Missing. If type code (below) = V, then 999 indicates variable wind direction.
-  direction_angle_udf = udf(lambda x: None if x == "999" else x,IntegerType())
+  direction_angle_udf = udf(lambda x: None if x == "999" else x)
   df = df.withColumn(column_name + '_direction_angle', direction_angle_udf(split_col.getItem(0)))
+  df = df.withColumn(column_name + '_direction_angle', df[column_name + '_direction_angle'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_direction_quality', split_col.getItem(1))
   
@@ -276,14 +279,9 @@ def wind_parse(df,column_name='WND'):
   df = df.withColumn(column_name + '_type_code', wind_type_udf(split_col.getItem(2)))
   
   #speed rate 9999 = Missing, fix formatting to be integer MIN: 0000 MAX: 0900
-  speed_udf = udf(lambda x: None if x == "9999" else x,IntegerType())
+  speed_udf = udf(lambda x: None if x == "9999" else x)
   df = df.withColumn(column_name + '_speed_rate', speed_udf(split_col.getItem(3))) #Likely most important code
-  
-  #WIND-OBSERVATION type code  NOTE: If a value of 9 appears with a wind speed of 0000, this indicates calm winds.
-  #df = df.withColumn(column_name + '_type_code', f.when(df[column_name + '_speed_rate'] == '0000' & df[column_name + '_type_code'] == 'null', "Calm")
-  
-  ##direction angle  999 = Missing. If type code (below) = V, then 999 indicates variable wind direction.
-  ###
+  df = df.withColumn(column_name + '_speed_rate', df[column_name + '_speed_rate'].cast(IntegerType()))
 
   df = df.withColumn(column_name + '_speed__quality', split_col.getItem(4))
   return df
@@ -291,8 +289,9 @@ def wind_parse(df,column_name='WND'):
 def sky_parse(df,column_name='CIG'):
   split_col = f.split(df[column_name], ',')
   
-  ceiling_height_udf = udf(lambda x: None if x == "99999" else x,IntegerType())
+  ceiling_height_udf = udf(lambda x: None if x == "99999" else x)
   df = df.withColumn(column_name + '_ceiling_height', ceiling_height_udf(split_col.getItem(0)))
+  df = df.withColumn(column_name + '_ceiling_height', df[column_name + '_ceiling_height'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_ceiling_quality', split_col.getItem(1))
   
@@ -305,9 +304,9 @@ def sky_parse(df,column_name='CIG'):
 def visibility_parse(df,column_name='VIS'):
   split_col = f.split(df[column_name], ',')
   
-  vis_distance_udf = udf(lambda x: None if x == "999999" else x,IntegerType())
+  vis_distance_udf = udf(lambda x: None if x == "999999" else x)
   df = df.withColumn(column_name + '_distance', vis_distance_udf(split_col.getItem(0))) #Likely most important code
-  
+  df = df.withColumn(column_name + '_distance', df[column_name + '_distance'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_distance_quality', split_col.getItem(1))
   
@@ -320,8 +319,9 @@ def visibility_parse(df,column_name='VIS'):
 def tmp_parse(df,column_name='TMP'):
   split_col = f.split(df[column_name], ',')
   
-  air_temp_udf = udf(lambda x: None if x == "+9999" else x,IntegerType())
+  air_temp_udf = udf(lambda x: None if x == "+9999" else x)
   df = df.withColumn(column_name + '_air_temperature', air_temp_udf(split_col.getItem(0))) #Likely most important code
+  df = df.withColumn(column_name + '_air_temperature', df[column_name + '_air_temperature'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_air_temperature_quality', split_col.getItem(1))
   return df
@@ -329,8 +329,9 @@ def tmp_parse(df,column_name='TMP'):
 def dew_parse(df,column_name='DEW'):
   split_col = f.split(df[column_name], ',')
   
-  dew_temp_udf = udf(lambda x: None if x == "+9999" else x,IntegerType())
+  dew_temp_udf = udf(lambda x: None if x == "+9999" else x)
   df = df.withColumn(column_name + '_dew_point_temp', dew_temp_udf(split_col.getItem(0))) #Likely most important code
+  df = df.withColumn(column_name + '_dew_point_temp', df[column_name + '_dew_point_temp'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_dew_point_temp_quality', split_col.getItem(1))
   return df
@@ -338,8 +339,9 @@ def dew_parse(df,column_name='DEW'):
 def slp_parse(df,column_name='SLP'):
   split_col = f.split(df[column_name], ',')
   
-  slp_udf = udf(lambda x: None if x == "99999" else x,IntegerType())
+  slp_udf = udf(lambda x: None if x == "99999" else x)
   df = df.withColumn(column_name + '_sea_level_pressure', slp_udf(split_col.getItem(0))) #Likely most important code, low-pressure system moves into an area, it usually leads to cloudiness, wind, and precipitation
+  df = df.withColumn(column_name + '_sea_level_pressure', df[column_name + '_sea_level_pressure'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_sea_level_pressure_quality', split_col.getItem(1))
   return df
@@ -351,8 +353,10 @@ def slp_parse(df,column_name='SLP'):
 # Automated_atmospheric_condition codes are used to report precipitation, fog, thunderstorm at the station during the preceding hour, but not at the time of observation.)
 def present_weather_parse(df,column_name='AW1'):
 #When string is empty put in a filler to enable parsing
-  blank_string_udf = udf(lambda x: "," if x == "" else x, StringType())
+  blank_string_udf = udf(lambda x: "," if x == "" else x)
   df = df.withColumn("AW1_New", blank_string_udf(df[column_name]))
+#   df = df.withColumn("AW1_New", df["AW1_New"].cast(StringType()))
+  
   split_col = f.split(df["AW1_New"], ',')
   
 #Replace missing data with nulls   
@@ -678,7 +682,7 @@ strings_indexer = []
 for i in strings:
   strings_indexer.append(i+"_Indexer")
   
-indexer = StringIndexer(inputCols=strings, outputCols=strings_indexer)
+indexer = StringIndexer(inputCols=strings, outputCols=strings_indexer, handleInvalid="keep")
 model = indexer.fit(train_set)
 
 train_one_hot = model.transform(train_set)
@@ -713,6 +717,6 @@ test_one_hot = model.transform(test_one_hot)
 
 # COMMAND ----------
 
-train_set.write.format("parquet").mode("overwrite").save(train_data_output_path_one_hot)
-val_set.write.format("parquet").mode("overwrite").save(validation_data_output_path_one_hot)
-test_set.write.format("parquet").mode("overwrite").save(test_data_output_path_one_hot)
+train_one_hot.write.format("parquet").mode("overwrite").save(train_data_output_path_one_hot)
+val_one_hot.write.format("parquet").mode("overwrite").save(validation_data_output_path_one_hot)
+test_one_hot.write.format("parquet").mode("overwrite").save(test_data_output_path_one_hot)
