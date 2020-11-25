@@ -692,7 +692,7 @@ categorical_index = [i + "_Index" for i in categorical]
 stringIndexer = StringIndexer(inputCols=categorical, outputCols=categorical_index)
     stringIndexer.fit(train_GBT)
 train_GBT = stringIndexer.transform(train_GBT)
-validation_GBT = stringIndexer.fit(validation_GBT).transform(validation_GBT)
+validation_GBT = stringIndexer.transform(validation_GBT)
 test_GBT = stringIndexer.fit(test_GBT).transform(test_GBT)
 
 # COMMAND ----------
