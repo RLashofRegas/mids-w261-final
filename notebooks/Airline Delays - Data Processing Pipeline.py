@@ -693,7 +693,7 @@ stringIndexer = StringIndexer(inputCols=categorical, outputCols=categorical_inde
     stringIndexer.fit(train_GBT)
 train_GBT = stringIndexer.transform(train_GBT)
 validation_GBT = stringIndexer.transform(validation_GBT)
-test_GBT = stringIndexer.fit(test_GBT).transform(test_GBT)
+test_GBT = stringIndexer.transform(test_GBT)
 
 # COMMAND ----------
 
