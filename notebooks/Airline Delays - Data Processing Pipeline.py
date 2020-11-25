@@ -679,7 +679,7 @@ test_set.write.format("parquet").mode("overwrite").save(test_data_output_path)
 
 # Index label
 labelIndexer = StringIndexer(inputCol="dep_del15", outputCol="label")
-
+labelIndexer.fit(train_GBT)
 train_GBT = labelIndexer.fit(train_GBT).transform(train_GBT)
 validation_GBT = labelIndexer.fit(validation_GBT).transform(validation_GBT)
 test_GBT = labelIndexer.fit(test_GBT).transform(test_GBT)
