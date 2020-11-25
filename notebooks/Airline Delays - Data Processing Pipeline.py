@@ -546,6 +546,25 @@ airlines.createOrReplaceTempView("airlines")
 
 # COMMAND ----------
 
+def crs_dep_hour(crs_dep_time):
+  '''
+  Takes crs_dep_time scheduled departure time and creates categorical variable for hour of scheduled departure.
+  '''
+  str_time = str(crs_dep_time)
+  if len(str_time) < 4:
+      crs_dep_hour = str(0) + str_time[0]
+  elif len(str_time) == 4:
+      crs_dep_hour = str_time[:2]
+  return crs_dep_hour
+  
+crs_dep_hour_udf = f.udf(crs_dep_hour, StringType())
+airlines = airlines.withColumn("crs_dep_hour", crs_dep_hour_udf("crs_dep_time"))
+
+# replace temp view
+airlines.createOrReplaceTempView("airlines")
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ### Join Airlines to Weather Data
 # MAGIC In this section we do the final join between airlines and weather data (for both origin and destination airports). We make sure to only join each flight to weather data from at least 2 hours before the scheduled departure of the flight.
