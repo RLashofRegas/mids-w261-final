@@ -682,7 +682,7 @@ labelIndexer = StringIndexer(inputCol="dep_del15", outputCol="label")
 labelIndexer.fit(train_GBT)
 train_GBT = labelIndexer.transform(train_GBT)
 validation_GBT = labelIndexer.transform(validation_GBT)
-test_GBT = labelIndexer.fit(test_GBT).transform(test_GBT)
+test_GBT = labelIndexer.transform(test_GBT)
 
 # Index features
 categorical = ["month", "day_of_week", "op_unique_carrier", "Holiday", "PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", "origin_WND_type_code", "origin_CIG_ceiling_visibility_okay", "origin_VIS_variability", "dest_WND_type_code", "dest_CIG_ceiling_visibility_okay", "dest_VIS_variability", "crs_dep_hour"]
