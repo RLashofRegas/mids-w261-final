@@ -677,6 +677,38 @@ test_set.write.format("parquet").mode("overwrite").save(test_data_output_path)
 
 # COMMAND ----------
 
+# Index label
+labelIndexer = StringIndexer(inputCol="dep_del15", outputCol="label")
+
+train_GBT = labelIndexer.fit(train_GBT).transform(train_GBT)
+validation_GBT = labelIndexer.fit(validation_GBT).transform(validation_GBT)
+test_GBT = labelIndexer.fit(test_GBT).transform(test_GBT)
+
+# Index features
+categorical = ["month", "day_of_week", "op_unique_carrier", "Holiday", "PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", "origin_WND_type_code", "origin_CIG_ceiling_visibility_okay", "origin_VIS_variability", "dest_WND_type_code", "dest_CIG_ceiling_visibility_okay", "dest_VIS_variability", "crs_dep_hour"]
+
+categorical_index = [i + "_Index" for i in categorical]
+  
+stringIndexer = StringIndexer(inputCols=categorical, outputCols=categorical_index)
+    
+train_GBT = stringIndexer.fit(train_GBT).transform(train_GBT)
+validation_GBT = stringIndexer.fit(validation_GBT).transform(validation_GBT)
+test_GBT = stringIndexer.fit(test_GBT).transform(test_GBT)
+
+# COMMAND ----------
+
+# Assemble categorical and numeric features into vector
+numeric = ["origin_num_flights","origin_avg_dep_delay", "origin_pct_dep_del15", "origin_avg_taxi_time", "origin_avg_weather_delay", "origin_avg_nas_delay", "origin_avg_security_delay", "origin_avg_late_aircraft_delay", "dest_num_flights","dest_avg_dep_delay", "dest_pct_dep_del15", "dest_avg_taxi_time", "dest_avg_weather_delay", "dest_avg_nas_delay", "dest_avg_security_delay", "dest_avg_late_aircraft_delay", "carrier_num_flights", "carrier_avg_dep_delay", "carrier_avg_carrier_delay", "origin_WND_speed_rate", "origin_CIG_ceiling_height", "origin_VIS_distance", "origin_TMP_air_temperature", "origin_DEW_dew_point_temp", "dest_WND_speed_rate", "dest_CIG_ceiling_height", "dest_VIS_distance", "dest_TMP_air_temperature", "dest_DEW_dew_point_temp"]
+
+features = categorical_index + numeric
+assembler = VectorAssembler(inputCols=features, outputCol="features")
+
+train_GBT = assembler.transform(train_GBT)
+validation_GBT = assembler.transform(validation_GBT)
+test_GBT = assembler.transform(test_GBT)
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ### One Hot Encode Features And Save Copy
 # MAGIC Some models like decision trees do better with/can handle the raw features without one-hot encoding applied. Thus we save two copies of our training data (one before one-hot encoding and one after). When performing the one-hot encoding we make sure to only use the train dataset to fit our encoder so that we are not "cheating" and bringing in data from the test or validation set.
