@@ -550,6 +550,25 @@ airlines.createOrReplaceTempView("airlines")
 
 # COMMAND ----------
 
+def crs_dep_hour(crs_dep_time):
+  '''
+  Takes crs_dep_time scheduled departure time and creates categorical variable for hour of scheduled departure.
+  '''
+  str_time = str(crs_dep_time)
+  if len(str_time) < 4:
+      crs_dep_hour = str(0) + str_time[0]
+  elif len(str_time) == 4:
+      crs_dep_hour = str_time[:2]
+  return crs_dep_hour
+  
+crs_dep_hour_udf = f.udf(crs_dep_hour, StringType())
+airlines = airlines.withColumn("crs_dep_hour", crs_dep_hour_udf("crs_dep_time"))
+
+# replace temp view
+airlines.createOrReplaceTempView("airlines")
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ### Join Airlines to Weather Data
 # MAGIC In this section we do the final join between airlines and weather data (for both origin and destination airports). We make sure to only join each flight to weather data from at least 2 hours before the scheduled departure of the flight.
@@ -656,6 +675,40 @@ train_set = cached_join.where((col("year") == '2015') | (col("year") == '2016') 
 val_set = cached_join.where((col("year") == '2018')).cache()
 test_set = cached_join.where((col("year") == '2019')).cache()
 
+# COMMAND ----------
+
+# Index label
+labelIndexer = StringIndexer(inputCol="dep_del15", outputCol="label")
+labelIndexer.fit(train_set)
+train_set = labelIndexer.transform(train_set)
+val_set = labelIndexer.transform(val_set)
+test_set = labelIndexer.transform(test_set)
+
+# Index features
+categorical = ["month", "day_of_week", "op_unique_carrier", "Holiday", "PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", "origin_WND_type_code", "origin_CIG_ceiling_visibility_okay", "origin_VIS_variability", "dest_WND_type_code", "dest_CIG_ceiling_visibility_okay", "dest_VIS_variability", "crs_dep_hour"]
+
+categorical_index = [i + "_Index" for i in categorical]
+  
+stringIndexer = StringIndexer(inputCols=categorical, outputCols=categorical_index)
+stringIndexer.fit(train_set)
+train_set = stringIndexer.transform(train_set)
+val_set = stringIndexer.transform(val_set)
+test_set = stringIndexer.transform(test_set)
+
+# COMMAND ----------
+
+# Assemble categorical and numeric features into vector
+numeric = ["origin_num_flights","origin_avg_dep_delay", "origin_pct_dep_del15", "origin_avg_taxi_time", "origin_avg_weather_delay", "origin_avg_nas_delay", "origin_avg_security_delay", "origin_avg_late_aircraft_delay", "dest_num_flights","dest_avg_dep_delay", "dest_pct_dep_del15", "dest_avg_taxi_time", "dest_avg_weather_delay", "dest_avg_nas_delay", "dest_avg_security_delay", "dest_avg_late_aircraft_delay", "carrier_num_flights", "carrier_avg_dep_delay", "carrier_avg_carrier_delay", "origin_WND_speed_rate", "origin_CIG_ceiling_height", "origin_VIS_distance", "origin_TMP_air_temperature", "origin_DEW_dew_point_temp", "dest_WND_speed_rate", "dest_CIG_ceiling_height", "dest_VIS_distance", "dest_TMP_air_temperature", "dest_DEW_dew_point_temp"]
+
+features = categorical_index + numeric
+assembler = VectorAssembler(inputCols=features, outputCol="features")
+
+train_set = assembler.transform(test_set)
+val_set = assembler.transform(val_set)
+test_set = assembler.transform(test_set)
+
+# COMMAND ----------
+
 train_set.write.format("parquet").mode("overwrite").save(train_data_output_path)
 val_set.write.format("parquet").mode("overwrite").save(validation_data_output_path)
 test_set.write.format("parquet").mode("overwrite").save(test_data_output_path)
@@ -668,52 +721,18 @@ test_set.write.format("parquet").mode("overwrite").save(test_data_output_path)
 
 # COMMAND ----------
 
-#Select string variables for formatting
+#Code to one hot encode categorical variables
 
-#Code to convert strings into indexer for one hot encoding
-strings = [i for i in ['op_unique_carrier','origin_WND_direction_quality','origin_WND_type_code','origin_WND_speed__quality',
-'origin_CIG_ceiling_quality','origin_VIS_distance_quality','origin_VIS_variability','origin_VIS_quality_variability','origin_TMP_air_temperature_quality','origin_DEW_dew_point_temp_quality','origin_SLP_sea_level_pressure_quality','dest_WND_direction_quality','dest_WND_type_code','dest_WND_speed__quality',
-'dest_CIG_ceiling_quality','dest_VIS_distance_quality','dest_VIS_variability','dest_VIS_quality_variability','dest_TMP_air_temperature_quality','dest_DEW_dew_point_temp_quality','dest_SLP_sea_level_pressure_quality']]
-
-# only 1 distinct value: ,'origin_DEW_dew_point_temp','dest_DEW_dew_point_temp'
-
-strings_indexer = []
-
-for i in strings:
-  strings_indexer.append(i+"_Indexer")
+list_encoders = [i + "_Indicator" for i in categorical]
   
-indexer = StringIndexer(inputCols=strings, outputCols=strings_indexer, handleInvalid="keep")
-model = indexer.fit(train_set)
+encoder = OneHotEncoder(inputCols=categorical,
+                        outputCols=list_encoders)
+
+model = encoder.fit(train_set)
 
 train_one_hot = model.transform(train_set)
 val_one_hot = model.transform(val_set)
 test_one_hot = model.transform(test_set)
-
-# COMMAND ----------
-
-#Code to one hot encode categorical variables including bucketed data 
-
-#Numeric non-continuous variables that will be one hot encoded 
-numeric_columns_non_cont = ["month","day_of_week","origin_airport_id"] # ,"CRS_DEP_TIME_Daypart"
-
-#Combine numeric variables with indexed strings for one hot encoding 
-categorical_var = strings_indexer + numeric_columns_non_cont
-
-list_of_categorical = [i for i in categorical_var]
-
-list_encoders = []
-
-for i in list_of_categorical:
-  list_encoders.append(i+"_Indicator")
-  
-encoder = OneHotEncoder(inputCols=[i for i in list_of_categorical],
-                        outputCols=[i for i in list_encoders])
-
-model = encoder.fit(train_one_hot)
-
-train_one_hot = model.transform(train_one_hot)
-val_one_hot = model.transform(val_one_hot)
-test_one_hot = model.transform(test_one_hot)
 
 # COMMAND ----------
 
