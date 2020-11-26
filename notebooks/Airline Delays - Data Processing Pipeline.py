@@ -259,8 +259,6 @@ weather = sqlContext.sql("SELECT * FROM weather").cache()
 
 # COMMAND ----------
 
-## **Updated**
-
 #Source: https://www.ncei.noaa.gov/data/global-hourly/doc/isd-format-document.pdf
 
 #Functions to Mandatory Weather Data - Parse Weather Variables WND - WIND-OBSERVATION, CIG - SKY-CONDITION-OBSERVATION, VIS - VISIBILITY-OBSERVATION, TMP - AIR-TEMPERATURE-OBSERVATION,  DEW - DEW POINT, SLP = Sea Level AIR-PRESSURE-OBSERVATION
@@ -268,9 +266,8 @@ def wind_parse(df,column_name='WND'):
   split_col = f.split(df[column_name], ',')
   
   #direction angle  999 = Missing. If type code (below) = V, then 999 indicates variable wind direction.
-  direction_angle_udf = udf(lambda x: None if x == "999" else x)
+  direction_angle_udf = udf(lambda x: None if x == "999" else x,IntegerType())
   df = df.withColumn(column_name + '_direction_angle', direction_angle_udf(split_col.getItem(0)))
-  df = df.withColumn(column_name + '_direction_angle', df[column_name + '_direction_angle'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_direction_quality', split_col.getItem(1))
   
@@ -279,9 +276,14 @@ def wind_parse(df,column_name='WND'):
   df = df.withColumn(column_name + '_type_code', wind_type_udf(split_col.getItem(2)))
   
   #speed rate 9999 = Missing, fix formatting to be integer MIN: 0000 MAX: 0900
-  speed_udf = udf(lambda x: None if x == "9999" else x)
+  speed_udf = udf(lambda x: None if x == "9999" else x,IntegerType())
   df = df.withColumn(column_name + '_speed_rate', speed_udf(split_col.getItem(3))) #Likely most important code
-  df = df.withColumn(column_name + '_speed_rate', df[column_name + '_speed_rate'].cast(IntegerType()))
+  
+  #WIND-OBSERVATION type code  NOTE: If a value of 9 appears with a wind speed of 0000, this indicates calm winds.
+  #df = df.withColumn(column_name + '_type_code', f.when(df[column_name + '_speed_rate'] == '0000' & df[column_name + '_type_code'] == 'null', "Calm")
+  
+  ##direction angle  999 = Missing. If type code (below) = V, then 999 indicates variable wind direction.
+  ###
 
   df = df.withColumn(column_name + '_speed__quality', split_col.getItem(4))
   return df
@@ -289,9 +291,8 @@ def wind_parse(df,column_name='WND'):
 def sky_parse(df,column_name='CIG'):
   split_col = f.split(df[column_name], ',')
   
-  ceiling_height_udf = udf(lambda x: None if x == "99999" else x)
+  ceiling_height_udf = udf(lambda x: None if x == "99999" else x,IntegerType())
   df = df.withColumn(column_name + '_ceiling_height', ceiling_height_udf(split_col.getItem(0)))
-  df = df.withColumn(column_name + '_ceiling_height', df[column_name + '_ceiling_height'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_ceiling_quality', split_col.getItem(1))
   
@@ -304,9 +305,9 @@ def sky_parse(df,column_name='CIG'):
 def visibility_parse(df,column_name='VIS'):
   split_col = f.split(df[column_name], ',')
   
-  vis_distance_udf = udf(lambda x: None if x == "999999" else x)
+  vis_distance_udf = udf(lambda x: None if x == "999999" else x,IntegerType())
   df = df.withColumn(column_name + '_distance', vis_distance_udf(split_col.getItem(0))) #Likely most important code
-  df = df.withColumn(column_name + '_distance', df[column_name + '_distance'].cast(IntegerType()))
+  
   
   df = df.withColumn(column_name + '_distance_quality', split_col.getItem(1))
   
@@ -319,9 +320,8 @@ def visibility_parse(df,column_name='VIS'):
 def tmp_parse(df,column_name='TMP'):
   split_col = f.split(df[column_name], ',')
   
-  air_temp_udf = udf(lambda x: None if x == "+9999" else x)
+  air_temp_udf = udf(lambda x: None if x == "+9999" else x,IntegerType())
   df = df.withColumn(column_name + '_air_temperature', air_temp_udf(split_col.getItem(0))) #Likely most important code
-  df = df.withColumn(column_name + '_air_temperature', df[column_name + '_air_temperature'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_air_temperature_quality', split_col.getItem(1))
   return df
@@ -329,9 +329,8 @@ def tmp_parse(df,column_name='TMP'):
 def dew_parse(df,column_name='DEW'):
   split_col = f.split(df[column_name], ',')
   
-  dew_temp_udf = udf(lambda x: None if x == "+9999" else x)
+  dew_temp_udf = udf(lambda x: None if x == "+9999" else x,IntegerType())
   df = df.withColumn(column_name + '_dew_point_temp', dew_temp_udf(split_col.getItem(0))) #Likely most important code
-  df = df.withColumn(column_name + '_dew_point_temp', df[column_name + '_dew_point_temp'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_dew_point_temp_quality', split_col.getItem(1))
   return df
@@ -339,9 +338,8 @@ def dew_parse(df,column_name='DEW'):
 def slp_parse(df,column_name='SLP'):
   split_col = f.split(df[column_name], ',')
   
-  slp_udf = udf(lambda x: None if x == "99999" else x)
+  slp_udf = udf(lambda x: None if x == "99999" else x,IntegerType())
   df = df.withColumn(column_name + '_sea_level_pressure', slp_udf(split_col.getItem(0))) #Likely most important code, low-pressure system moves into an area, it usually leads to cloudiness, wind, and precipitation
-  df = df.withColumn(column_name + '_sea_level_pressure', df[column_name + '_sea_level_pressure'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_sea_level_pressure_quality', split_col.getItem(1))
   return df
@@ -353,10 +351,8 @@ def slp_parse(df,column_name='SLP'):
 # Automated_atmospheric_condition codes are used to report precipitation, fog, thunderstorm at the station during the preceding hour, but not at the time of observation.)
 def present_weather_parse(df,column_name='AW1'):
 #When string is empty put in a filler to enable parsing
-  blank_string_udf = udf(lambda x: "," if x == "" else x)
+  blank_string_udf = udf(lambda x: "," if x == "" else x, StringType())
   df = df.withColumn("AW1_New", blank_string_udf(df[column_name]))
-#   df = df.withColumn("AW1_New", df["AW1_New"].cast(StringType()))
-  
   split_col = f.split(df["AW1_New"], ',')
   
 #Replace missing data with nulls   
@@ -598,6 +594,7 @@ SELECT
   dco.num_flights AS carrier_num_flights,
   dco.avg_dep_delay AS carrier_avg_dep_delay,
   dco.avg_carrier_delay AS carrier_avg_carrier_delay,
+  wo.WND_direction_angle AS origin_WND_direction_angle,  
   wo.WND_direction_quality AS origin_WND_direction_quality,
   wo.WND_type_code AS origin_WND_type_code,
   wo.WND_speed_rate AS origin_WND_speed_rate,
@@ -613,9 +610,11 @@ SELECT
   wo.TMP_air_temperature_quality AS origin_TMP_air_temperature_quality,
   wo.DEW_dew_point_temp AS origin_DEW_dew_point_temp,
   wo.DEW_dew_point_temp_quality AS origin_DEW_dew_point_temp_quality,
+  wo.SLP_sea_level_pressure AS origin_SLP_sea_level_pressure,
   wo.SLP_sea_level_pressure_quality AS origin_SLP_sea_level_pressure_quality,
   wo.aw1_automated_atmospheric_condition AS origin_aw1_automated_atmospheric_condition,
   wo.aw1_quality_automated_atmospheric_condition AS origin_aw1_quality_automated_atmospheric_condition,
+  wd.WND_direction_angle AS dest_WND_direction_angle,  
   wd.WND_direction_quality AS dest_WND_direction_quality,
   wd.WND_type_code AS dest_WND_type_code,
   wd.WND_speed_rate AS dest_WND_speed_rate,
@@ -631,6 +630,7 @@ SELECT
   wd.TMP_air_temperature_quality AS dest_TMP_air_temperature_quality,
   wd.DEW_dew_point_temp AS dest_DEW_dew_point_temp,
   wd.DEW_dew_point_temp_quality AS dest_DEW_dew_point_temp_quality,
+  wd.SLP_sea_level_pressure AS dest_SLP_sea_level_pressure,
   wd.SLP_sea_level_pressure_quality AS dest_SLP_sea_level_pressure_quality,
   wd.aw1_automated_atmospheric_condition AS dest_aw1_automated_atmospheric_condition,
   wd.aw1_quality_automated_atmospheric_condition AS dest_aw1_quality_automated_atmospheric_condition
@@ -678,19 +678,18 @@ test_set = cached_join.where((col("year") == '2019')).cache()
 # COMMAND ----------
 
 # Index label
-labelIndexer = StringIndexer(inputCol="dep_del15", outputCol="label")
-labelIndexer.fit(train_set)
+labelIndexer = StringIndexer(inputCol="dep_del15", outputCol="label").setHandleInvalid("keep").fit(train_set)
+
 train_set = labelIndexer.transform(train_set)
 val_set = labelIndexer.transform(val_set)
 test_set = labelIndexer.transform(test_set)
 
 # Index features
-categorical = ["month", "day_of_week", "op_unique_carrier", "Holiday", "PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", "origin_WND_type_code", "origin_CIG_ceiling_visibility_okay", "origin_VIS_variability", "dest_WND_type_code", "dest_CIG_ceiling_visibility_okay", "dest_VIS_variability", "crs_dep_hour"]
+categorical = ["month", "day_of_week", "op_unique_carrier", "Holiday", "PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", "origin_WND_direction_angle", "origin_WND_type_code", "origin_CIG_ceiling_visibility_okay", "origin_VIS_variability", "dest_WND_direction_angle", "dest_WND_type_code", "dest_CIG_ceiling_visibility_okay", "dest_VIS_variability", "crs_dep_hour"]
 
 categorical_index = [i + "_Index" for i in categorical]
   
-stringIndexer = StringIndexer(inputCols=categorical, outputCols=categorical_index)
-stringIndexer.fit(train_set)
+stringIndexer = StringIndexer(inputCols=categorical, outputCols=categorical_index).setHandleInvalid("keep").fit(train_set)
 train_set = stringIndexer.transform(train_set)
 val_set = stringIndexer.transform(val_set)
 test_set = stringIndexer.transform(test_set)
@@ -698,10 +697,10 @@ test_set = stringIndexer.transform(test_set)
 # COMMAND ----------
 
 # Assemble categorical and numeric features into vector
-numeric = ["origin_num_flights","origin_avg_dep_delay", "origin_pct_dep_del15", "origin_avg_taxi_time", "origin_avg_weather_delay", "origin_avg_nas_delay", "origin_avg_security_delay", "origin_avg_late_aircraft_delay", "dest_num_flights","dest_avg_dep_delay", "dest_pct_dep_del15", "dest_avg_taxi_time", "dest_avg_weather_delay", "dest_avg_nas_delay", "dest_avg_security_delay", "dest_avg_late_aircraft_delay", "carrier_num_flights", "carrier_avg_dep_delay", "carrier_avg_carrier_delay", "origin_WND_speed_rate", "origin_CIG_ceiling_height", "origin_VIS_distance", "origin_TMP_air_temperature", "origin_DEW_dew_point_temp", "dest_WND_speed_rate", "dest_CIG_ceiling_height", "dest_VIS_distance", "dest_TMP_air_temperature", "dest_DEW_dew_point_temp"]
+numeric = ["origin_num_flights","origin_avg_dep_delay", "origin_pct_dep_del15", "origin_avg_taxi_time", "origin_avg_weather_delay", "origin_avg_nas_delay", "origin_avg_security_delay", "origin_avg_late_aircraft_delay", "dest_num_flights","dest_avg_dep_delay", "dest_pct_dep_del15", "dest_avg_taxi_time", "dest_avg_weather_delay", "dest_avg_nas_delay", "dest_avg_security_delay", "dest_avg_late_aircraft_delay", "carrier_num_flights", "carrier_avg_dep_delay", "carrier_avg_carrier_delay", "origin_WND_speed_rate", "origin_CIG_ceiling_height", "origin_VIS_distance", "origin_TMP_air_temperature", "origin_DEW_dew_point_temp", "origin_SLP_sea_level_pressure", "dest_WND_speed_rate", "dest_CIG_ceiling_height", "dest_VIS_distance", "dest_TMP_air_temperature", "dest_DEW_dew_point_temp", "dest_SLP_sea_level_pressure"]
 
 features = categorical_index + numeric
-assembler = VectorAssembler(inputCols=features, outputCol="features")
+assembler = VectorAssembler(inputCols=features, outputCol="features").setHandleInvalid("keep")
 
 train_set = assembler.transform(test_set)
 val_set = assembler.transform(val_set)
@@ -725,14 +724,11 @@ test_set.write.format("parquet").mode("overwrite").save(test_data_output_path)
 
 list_encoders = [i + "_Indicator" for i in categorical]
   
-encoder = OneHotEncoder(inputCols=categorical,
-                        outputCols=list_encoders)
+encoder = OneHotEncoder(inputCols=categorical_index, outputCols=list_encoders).setHandleInvalid("keep").fit(train_set)
 
-model = encoder.fit(train_set)
-
-train_one_hot = model.transform(train_set)
-val_one_hot = model.transform(val_set)
-test_one_hot = model.transform(test_set)
+train_one_hot = encoder.transform(train_set)
+val_one_hot = encoder.transform(val_set)
+test_one_hot = encoder.transform(test_set)
 
 # COMMAND ----------
 
