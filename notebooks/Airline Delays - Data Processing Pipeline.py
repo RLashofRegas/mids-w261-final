@@ -13,7 +13,7 @@
 # COMMAND ----------
 
 # package imports
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType, NullType, ShortType, DateType, BooleanType, BinaryType
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType, NullType, ShortType, DateType, BooleanType, BinaryType, Row
 from pyspark.sql import SQLContext
 from pyspark.sql import types
 from pyspark.sql.functions import col, lag, udf, to_timestamp, monotonically_increasing_id
@@ -159,7 +159,8 @@ SELECT
   TO_UTC_TIMESTAMP(DATE_TRUNC('hour', TO_TIMESTAMP(CONCAT(fl_date, ' ', LPAD(crs_dep_time, 4, '0')), 'yyyy-MM-dd HHmm')), to.timezone) AS truncated_crs_dep_time_utc,
   TO_UTC_TIMESTAMP(DATE_TRUNC('hour', TO_TIMESTAMP(CONCAT(fl_date, ' ', LPAD(crs_dep_time, 4, '0')), 'yyyy-MM-dd HHmm')), to.timezone) - INTERVAL 3 HOURS AS truncated_crs_dep_minus_three_utc,
   TO_UTC_TIMESTAMP(TO_TIMESTAMP(CONCAT(fl_date, ' ', LPAD(crs_dep_time, 4, '0')), 'yyyy-MM-dd HHmm'), to.timezone) AS crs_dep_time_utc,
-  TO_UTC_TIMESTAMP(TO_TIMESTAMP(CONCAT(fl_date, ' ', LPAD(crs_dep_time, 4, '0')), 'yyyy-MM-dd HHmm'), to.timezone) - INTERVAL 2 HOURS 15 MINUTES AS crs_dep_minus_two_fifteen_utc
+  TO_UTC_TIMESTAMP(TO_TIMESTAMP(CONCAT(fl_date, ' ', LPAD(crs_dep_time, 4, '0')), 'yyyy-MM-dd HHmm'), to.timezone) - INTERVAL 2 HOURS 15 MINUTES AS crs_dep_minus_two_fifteen_utc,
+  TO_UTC_TIMESTAMP(TO_TIMESTAMP(CONCAT(fl_date, ' ', LPAD(crs_arr_time, 4, '0')), 'yyyy-MM-dd HHmm'), to.timezone) AS crs_arr_time_utc
 FROM airlines_temp AS f
 LEFT JOIN city_state_timezone AS td ON
   f.short_dest_city_name = td.city_state
@@ -245,7 +246,9 @@ SELECT
   wr.slp,
   wr.airport_code,
   wr.hour,
-  wr.aw1
+  wr.aw1,
+  wr.aj1,
+  wr.aa1
 FROM weather_ranked AS wr
 WHERE
   wr.rank = 1
@@ -364,6 +367,29 @@ def present_weather_parse(df,column_name='AW1'):
   
   return df
 
+#SNOW DEPTH AT TIME OF READING- ASSUMPTION IS THAT A BLANK READING INDICATES 0 SNOW DEPTH
+def snow_dimension_parse(df,column_name = 'AJ1'):
+  '''Parse 1st item of aj1 reading. '''
+  split_col = f.split(df[column_name], ',')
+  
+  snow_depth_udf = udf(lambda x: None if x == "9999" else (x if x else "0"))
+  df = df.withColumn(column_name + '_snow_depth', snow_depth_udf(split_col.getItem(0))) #Likely most important code
+  df = df.withColumn(column_name + '_snow_depth', df[column_name + '_snow_depth'].cast(IntegerType()))
+
+  return df
+
+#RAIN DEPTH AT TIME OF READING- ASSUMPTION IS THAT A BLANK READING INDICATES 0 RAIN DEPTH
+def rain_dimension_parse(df,column_name = 'AA1'):
+  '''Parse 2nd item of AA1 reading'''
+  split_col = f.split(df[column_name], ',')
+  
+  snow_depth_udf = udf(lambda x: None if x == "9999" else (x if x else "0"))
+  df = df.withColumn(column_name + '_rain_depth', snow_depth_udf(split_col.getItem(1))) #Likely most important code
+  df = df.withColumn(column_name + '_rain_depth', df[column_name + '_rain_depth'].cast(IntegerType()))
+
+  return df
+ 
+
 weather = wind_parse(weather)  
 weather = sky_parse(weather)  
 weather = visibility_parse(weather)  
@@ -371,6 +397,8 @@ weather = tmp_parse(weather)
 weather = dew_parse(weather)  
 weather = slp_parse(weather)  
 weather = present_weather_parse(weather)
+weather = snow_dimension_parse(weather)
+weather = rain_dimension_parse(weather)
 weather = weather.cache()
 
 weather.createOrReplaceTempView("weather")
@@ -474,16 +502,19 @@ def chain_delay_feature_engineering(airline_df):
   delay_two_before: was flight two before delayed? (binary)
   PREVIOUS_FLIGHT_DELAYED_FOR_MODEL: If previous flight is at least 2 hours 15 minutes prior (8100 seconds), was it delayed? If less than 2:15, was flight 2 before delayed? (binary)'''
      
+  airline_df = airlines
+
+
   airline_df.createOrReplaceTempView("airlines_temp_view")
   #Filter out cancelled flights
   airlines_non_cancelled = sqlContext.sql("""
   SELECT *
   FROM airlines_temp_view WHERE CANCELLED != 1
   """)
-  
+
   #Store new df with limited number of ordered columns that we can use to window 
-  airlines_aircraft_tracking = airlines_non_cancelled[["tail_num","fl_date","origin_city_name", "dest_city_name", "dep_del15", "crs_dep_time_utc", "crs_dep_minus_two_fifteen_utc"]].orderBy("tail_num","fl_date", "crs_dep_time_utc")
-  
+  airlines_aircraft_tracking = airlines_non_cancelled[["tail_num","fl_date","origin_city_name", "dest_city_name", "dep_del15", "crs_dep_time_utc", "crs_dep_minus_two_fifteen_utc", "crs_arr_time_utc"]].orderBy("tail_num","fl_date", "crs_dep_time_utc")
+
   #This section is related to windowing so that we can pull information from previous flight and flight 2 before current flight. Windowing will only pull for the same tail number
   w = Window.partitionBy("tail_num").orderBy("crs_dep_time_utc")
 
@@ -491,42 +522,54 @@ def chain_delay_feature_engineering(airline_df):
   diff2 = col("crs_dep_time_utc").cast("long") - lag("crs_dep_time_utc", 2).over(w).cast("long")
   delay_one_before = lag("dep_del15", 1).over(w)
   delay_two_before = lag("dep_del15", 2).over(w)
+  arr_time_one_before = col("crs_dep_time_utc").cast("long") - lag("crs_arr_time_utc", 1).over(w).cast("long")
+  arr_time_two_before = col("crs_dep_time_utc").cast("long") - lag("crs_arr_time_utc", 2).over(w).cast("long")
 
   airlines_aircraft_tracking_diff = airlines_aircraft_tracking.withColumn("dep_time_diff_one_flight_before", diff)\
                                   .withColumn("dep_time_diff_two_flights_before", diff2)\
                                   .withColumn("delay_one_before", delay_one_before)\
-                                  .withColumn("delay_two_before", delay_two_before)
+                                  .withColumn("delay_two_before", delay_two_before)\
+                                  .withColumn("arr_time_one_before", arr_time_one_before)\
+                                  .withColumn("arr_time_two_before", arr_time_two_before)
 
-  def chain_delay_analysis (dep_time_diff_one_flight_before, dep_time_diff_two_flights_before,
-                           delay_one_before, delay_two_before):
+  def chain_delay_analysis (crs_dep_time_utc, dep_time_diff_one_flight_before, dep_time_diff_two_flights_before,
+                           delay_one_before, delay_two_before, arr_time_one_before, arr_time_two_before):
     '''Takes info on flight before: departure time difference, whether
     flight was delayed and returns 1 if flight before was delayed AND outside of 2:15 from current flight.
-    If outside of 2:15 looks at flight 2 before and returns 1 if that one was delayed, 0 if not.'''
+    If outside of 2:15 looks at flight 2 before and returns 1 if that one was delayed, 0 if not. If scheduled arrival of previous flight
+    is greater than 2 hours before current flight we mark as 0'''
     try:
-      if dep_time_diff_one_flight_before >= 8100:
-        return int(delay_one_before)
-      else:
-        return int(delay_two_before)
+      if dep_time_diff_one_flight_before >= 8100:      
+        if arr_time_one_before <= 7200:
+          return delay_one_before
+        else:
+          return 0
+      else:  
+        if arr_time_two_before <= 7200:
+          return delay_two_before
+        else:
+          return 0
     except:
       return 'null'
+
   #NEED TO RETURN TO THIS AND DECIDE WHAT TO DO IF FLIGHT 2 PREVIOUS WAS WITHIN 2:15. I BELIEVE MOST (ALL?) OF THOSE ARE DATA CLEANSING ISSUES
-  #ALSO SHOULD LOOK AT THE CASES WHERE THE PREVIOUS FLIGHT WAS SO MUCH EARLIER THAT ITS DELAY DOES NOT REALLY AFFECT CURRENT FLIGHT. HOW MUCH EARLIER
-  #SHOULD THAT BE?
 
   chain_delay_analysis_udf = f.udf(chain_delay_analysis)
+  arr_dep_time_dif_udf = f.udf(arr_dep_time_dif)
 
-  airlines_aircraft_tracking_diff_for_join = airlines_aircraft_tracking_diff.withColumn("PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", chain_delay_analysis_udf('dep_time_diff_one_flight_before', 'dep_time_diff_two_flights_before',
-                           'delay_one_before', 'delay_two_before'))
-  
+  airlines_aircraft_tracking_diff_for_join = airlines_aircraft_tracking_diff.withColumn("PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", chain_delay_analysis_udf('crs_dep_time_utc', 'dep_time_diff_one_flight_before', 'dep_time_diff_two_flights_before', 'delay_one_before', 'delay_two_before', 'arr_time_one_before', 'arr_time_two_before'))
+  #                                                                            .withColumn("PREVIOUS_FLIGHT_ARR_TIME_DIFF", arr_dep_time_dif_udf('crs_dep_time_utc', 'dep_time_diff_one_flight_before', 'dep_time_diff_two_flights_before', 'arr_time_one_before', 'arr_time_two_before'))
+
   airline_df_with_id = airline_df.withColumn("id", monotonically_increasing_id())
-  
+
   join_columns = ["tail_num","fl_date","origin_city_name", "dest_city_name", "crs_dep_time_utc"]
-  
+
   airlines_chain_delays = airline_df_with_id.alias("a").join(airlines_aircraft_tracking_diff_for_join.alias("j"), join_columns, 'left_outer') \
                             .select('a.year', 'a.quarter', 'a.month', 'a.day_of_week', 'a.fl_date', 'a.op_unique_carrier', 'a.tail_num', 'a.origin_airport_id', 'a.origin', 'a.origin_city_name', 'a.dest_airport_id', 'a.dest', 'a.dest_city_name', 'a.crs_dep_time', 'a.dep_time', 'a.dep_delay', 'a.dep_del15', 'a.cancelled', 'a.diverted', 'a.short_dest_city_name', 'a.short_orig_city_name', 'a.carrier_delay', 'a.weather_delay', 'a.nas_delay', 'a.security_delay', 'a.late_aircraft_delay', 'a.taxi_out', 'a.dest_timezone', 'a.origin_timezone', 'a.truncated_crs_dep_time_utc', 'a.truncated_crs_dep_minus_three_utc', 'a.crs_dep_time_utc', 'a.crs_dep_minus_two_fifteen_utc', 'a.Holiday', 'a.id', 'j.dep_time_diff_one_flight_before', 'j.dep_time_diff_two_flights_before', 'j.delay_one_before', 'j.delay_two_before', 'j.PREVIOUS_FLIGHT_DELAYED_FOR_MODELS')
-  
+
   #Drop duplicates created during join. Is there a better way?
   airlines_chain_delays_no_dups = airlines_chain_delays.dropDuplicates(['id'])
+
   
   return airlines_chain_delays_no_dups
 
@@ -606,6 +649,8 @@ SELECT
   wo.SLP_sea_level_pressure_quality AS origin_SLP_sea_level_pressure_quality,
   wo.aw1_automated_atmospheric_condition AS origin_aw1_automated_atmospheric_condition,
   wo.aw1_quality_automated_atmospheric_condition AS origin_aw1_quality_automated_atmospheric_condition,
+  wo.aj1_snow_depth AS origin_aj1_snow_depth,
+  wo.aa1_rain_depth AS origin_aa1_rain_depth,
   wd.WND_direction_angle AS dest_WND_direction_angle,  
   wd.WND_direction_quality AS dest_WND_direction_quality,
   wd.WND_type_code AS dest_WND_type_code,
@@ -625,7 +670,9 @@ SELECT
   wd.SLP_sea_level_pressure AS dest_SLP_sea_level_pressure,
   wd.SLP_sea_level_pressure_quality AS dest_SLP_sea_level_pressure_quality,
   wd.aw1_automated_atmospheric_condition AS dest_aw1_automated_atmospheric_condition,
-  wd.aw1_quality_automated_atmospheric_condition AS dest_aw1_quality_automated_atmospheric_condition
+  wd.aw1_quality_automated_atmospheric_condition AS dest_aw1_quality_automated_atmospheric_condition,
+  wd.aj1_snow_depth AS dest_aj1_snow_depth,
+  wd.aa1_rain_depth AS dest_aa1_rain_depth
 FROM airlines AS f
 LEFT JOIN weather AS wo ON
   f.origin = wo.airport_code
@@ -689,9 +736,9 @@ test_set = stringIndexer.transform(test_set)
 # COMMAND ----------
 
 # Assemble categorical and numeric features into vector
-numeric = ["origin_num_flights","origin_avg_dep_delay", "origin_pct_dep_del15", "origin_avg_taxi_time", "origin_avg_weather_delay", "origin_avg_nas_delay", "origin_avg_security_delay", "origin_avg_late_aircraft_delay", "dest_num_flights","dest_avg_dep_delay", "dest_pct_dep_del15", "dest_avg_taxi_time", "dest_avg_weather_delay", "dest_avg_nas_delay", "dest_avg_security_delay", "dest_avg_late_aircraft_delay", "carrier_num_flights", "carrier_avg_dep_delay", "carrier_avg_carrier_delay", "origin_WND_speed_rate", "origin_CIG_ceiling_height", "origin_VIS_distance", "origin_TMP_air_temperature", "origin_DEW_dew_point_temp", "origin_SLP_sea_level_pressure", "dest_WND_speed_rate", "dest_CIG_ceiling_height", "dest_VIS_distance", "dest_TMP_air_temperature", "dest_DEW_dew_point_temp", "dest_SLP_sea_level_pressure"]
+numeric = ["origin_num_flights","origin_avg_dep_delay", "origin_pct_dep_del15", "origin_avg_taxi_time", "origin_avg_weather_delay", "origin_avg_nas_delay", "origin_avg_security_delay", "origin_avg_late_aircraft_delay", "dest_num_flights","dest_avg_dep_delay", "dest_pct_dep_del15", "dest_avg_taxi_time", "dest_avg_weather_delay", "dest_avg_nas_delay", "dest_avg_security_delay", "dest_avg_late_aircraft_delay", "carrier_num_flights", "carrier_avg_dep_delay", "carrier_avg_carrier_delay", "origin_WND_speed_rate", "origin_CIG_ceiling_height", "origin_VIS_distance", "origin_TMP_air_temperature", "origin_DEW_dew_point_temp", "origin_SLP_sea_level_pressure", "origin_aj1_snow_depth", "origin_aa1_rain_depth", "dest_WND_speed_rate", "dest_CIG_ceiling_height", "dest_VIS_distance", "dest_TMP_air_temperature", "dest_DEW_dew_point_temp", "dest_SLP_sea_level_pressure", "dest_aj1_snow_depth", "dest_aa1_rain_depth"]
 
-features = categorical_index + numeric
+features = categorical_index + numeric 
 assembler = VectorAssembler(inputCols=features, outputCol="features").setHandleInvalid("keep")
 
 train_set = assembler.transform(train_set)
