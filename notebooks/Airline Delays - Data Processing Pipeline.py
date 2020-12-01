@@ -534,20 +534,20 @@ def chain_delay_feature_engineering(airline_df):
     '''Takes info on flight before: departure time difference, whether
     flight was delayed and returns 1 if flight before was delayed AND outside of 2:15 from current flight.
     If outside of 2:15 looks at flight 2 before and returns 1 if that one was delayed, 0 if not. If scheduled arrival of previous flight
-    is greater than 2 hours before current flight we mark as 0'''
+    is greater than 5 hours or flight 2 before great than 7 hours before current flight we mark as 0'''
     try:
       if dep_time_diff_one_flight_before >= 8100:      
-        if arr_time_one_before <= 7200:
+        if arr_time_one_before <= 18000:
           return delay_one_before
         else:
-          return 0
+          return float(0.0)
       else:  
-        if arr_time_two_before <= 7200:
+        if arr_time_two_before <= 25200:
           return delay_two_before
         else:
-          return 0
+          return float(0.0)
     except:
-      return 'null'
+      return None
 
   #NEED TO RETURN TO THIS AND DECIDE WHAT TO DO IF FLIGHT 2 PREVIOUS WAS WITHIN 2:15. I BELIEVE MOST (ALL?) OF THOSE ARE DATA CLEANSING ISSUES
 
