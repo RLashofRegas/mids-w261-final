@@ -22,6 +22,210 @@
 
 # MAGIC %md
 # MAGIC ## Exploratory Data Analysis
+# MAGIC 
+# MAGIC With our exploratory data analysis we had two primary goals:
+# MAGIC 1. Understand the columns available including any missing or invalid data as well as the format of that data.
+# MAGIC 2. Determine the distribution of relevant columns and their relationship with the outcome variable in order to give hints towards our feature engineering.
+# MAGIC 
+# MAGIC The obvious first step is to read in our data which is accomplished through the code below:
+
+# COMMAND ----------
+
+# package imports
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType, NullType, ShortType, DateType, BooleanType, BinaryType
+from pyspark.sql import SQLContext
+from pyspark.sql import types
+from pyspark.sql.functions import col, lag, udf, to_timestamp, monotonically_increasing_id
+import pyspark.sql.functions as f
+from pyspark.sql.window import Window
+from pandas.tseries.holiday import USFederalHolidayCalendar
+from datetime import datetime, timedelta
+from pyspark.ml.feature import IndexToString, StringIndexer, OneHotEncoder, VectorAssembler, Bucketizer, StandardScaler
+import pandas as pd
+
+# COMMAND ----------
+
+# initialize the sql context
+sqlContext = SQLContext(sc)
+
+# COMMAND ----------
+
+# input data paths
+weather_data_path = "dbfs:/mnt/mids-w261/datasets_final_project/weather_data/weather20*.parquet"
+airlines_data_path = "dbfs:/mnt/mids-w261/datasets_final_project/parquet_airlines_data/20*.parquet"
+
+# COMMAND ----------
+
+# read in raw data
+airlines = spark.read.option("header", "true").parquet(airlines_data_path) # full airline dataset
+
+# register temp view
+airlines.createOrReplaceTempView("airlines")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Airline EDA
+# MAGIC One of the first things we looked at was the distribution of our outcome variable `dep_del15`:
+
+# COMMAND ----------
+
+display(sqlContext.sql("SELECT dep_del15, count(*) AS flights FROM airlines GROUP BY dep_del15 ORDER BY count(*) desc"))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC As we can see the distribution is uneven with an approximately 20/80 split between flights that were delayed and those that weren't. In the proceeding sections we describe our methods for handling this using over-sampling or class weight variables.
+# MAGIC 
+# MAGIC We also notice that there are a little over 1% nulls. A little more analysis (ommitted here for brevity) shows that of these 477,296 flights:
+# MAGIC 
+# MAGIC - 472,552 of them were cancelled - we choose to ignore these in our training set because, for the purposes of our model, we are not diving into the various `cancellation_code`s and therefore do not have data on what caused the cancellation (i.e. was it due to not enough passengers, weather, etc.). This is a potential next step that we could come back to in the future. For our test and validation sets we consider these flights as incorrectly predicted regardless of whether we predicted them as delayed or not.
+# MAGIC - 4,739 of them had `crs_dep_time` (scheduled departure time) equal to `dep_time` (actual departure time). This seems to be a bug in the data because the rest of the fields for these flights appear normal. For this reason we manually set the `dep_del15` column to 0 for these flights.
+# MAGIC - The final 5 flights are marked as `diverted` and have additional records for the new flight number assigned to those airplanes from the same departure airport. For this reason we choose to ignore them in our training set, and as above mark them as incorrect predictions regardless of our predicted class.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC The next thing we explored in the flights data was the timing of flights. We guess that, as with flights themselves, delays will have a clear time dependency. This time dependency may come in many different forms - hour of the day, day of the week, day of the year, etc. Below we explore these distributions via plots of the ratio of flights to delays:
+
+# COMMAND ----------
+
+# Distribution of flights and delays by scheduled departure time of day
+display(sqlContext.sql("SELECT ROUND(crs_dep_time, -2) AS hour, SUM(dep_del15) / COUNT(*) AS delay_pct FROM airlines GROUP BY hour ORDER BY hour"))
+
+# Distribution of flights and delays by day of week
+display(sqlContext.sql("SELECT day_of_week, SUM(dep_del15) / COUNT(*) AS delay_pct FROM airlines GROUP BY day_of_week ORDER BY day_of_week"))
+
+# Distribution of flights and delays by day of year
+display(sqlContext.sql("SELECT CAST(DATE_FORMAT(fl_date, 'D') AS INT) AS day_of_year, SUM(dep_del15) / COUNT(*) AS delay_pct FROM airlines GROUP BY day_of_year ORDER BY day_of_year"))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC We can see from above that the clearest correllation exists with the hour of the day because, while the number of flights is relatively constant for most of the day, the number of delays increases substantially as the day progresses. This makes sense given our preliminary research discussed in the first section in relation to "chain delays". As the day progresses it is more likely that there was a previous delay that may be affecting this flight causing more chain delays.
+# MAGIC 
+# MAGIC It is somewhat surprising to us that we do not see a strong signal based on the day of the week, but this is useful info nonetheless to help influence our choice of features.
+# MAGIC 
+# MAGIC Finally, it does seem like the day of year could be useful. While for the most part the pattern of delays matches the pattern in the number of flights (relatively constant ratio), there does seem to be an increase in the flights to delays ratio in both the summer and winter months. This makes some sense because these months involve both an increase in the number of flights as well as an increase in the amount of inclement weather in most regions.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC The final relationship that we found useful to explore in the flights data relates to the airport. Building on our concepts of root cause delays and chain delays we would think that on a given day with a significant number of delays we are likely to see a large spike compared to days with a more regular number of delays. This is because as the number of delays on a given day increases, it is more likely that the day in question has a root cause delay such as weather or an airport-wide issue. In addition, as we have more delays on a given day the number of chain delays also increases.
+# MAGIC 
+# MAGIC To understand this it is useful to compare a single airport for a single year as compared to all other airports in the same year. In this case we look at Chicago (ORD) for the year of 2015:
+
+# COMMAND ----------
+
+# delays by day of year for a single year and airport
+display(sqlContext.sql("""
+SELECT
+  CAST(DATE_FORMAT(fl_date, 'D') AS INT) AS day_of_year,
+  SUM(CASE WHEN origin = 'ORD' THEN dep_del15 ELSE 0 END) / SUM(CASE WHEN origin = 'ORD' THEN 1 ELSE 0 END) AS ord_delay_pct,
+  SUM(CASE WHEN origin <> 'ORD' THEN dep_del15 ELSE 0 END) / SUM(CASE WHEN origin <> 'ORD' THEN 1 ELSE 0 END) AS other_delay_pct
+FROM airlines
+WHERE
+  year = '2015'
+GROUP BY day_of_year
+ORDER BY day_of_year"""))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC From the above plot we can see that our theory holds some weight. For example on January 4th ORD had over 70% of flights delayed whereas the national average was 44% and on February 26th ORD had almost 74% delays whereas the national average was only around 30%. This makes it clear that we need to capture airport-level statistics in our feature engineering (which we discuss further in the following section).
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Weather EDA
+# MAGIC 
+# MAGIC To get an understanding of what the weather data looks like, let's take a look at some example rows:
+
+# COMMAND ----------
+
+display(weather.limit(10))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC As we can see there is a vast majority of columns with blanks for these example rows. In general as we look at the weather data we see this same trend - many of the columns are exremely specific and technical details around a single (relatively rare) weather condition. In addition, many weather stations do not capture all of the data fields.
+# MAGIC 
+# MAGIC Looking at some of the other columns that we would think would be useful such as visibility, wind details, temperature, dew point, etc. we see that they are mostly in a coded format that will require us to parse out the values we need (discussed further in the following section).
+# MAGIC 
+# MAGIC In order to perform some additional EDA on the weather data we read in our saved files that contain some parsed features joined to the flights data:
+
+# COMMAND ----------
+
+final_project_path = "dbfs:/mnt/mids-w261/group_5/"
+train_data_output_path_one_hot = final_project_path + "training_data_output/train_one_hot.parquet"
+
+# read in parsed data
+joined = spark.read.option("header", "true").parquet(train_data_output_path_one_hot)
+
+# register temp views
+joined.createOrReplaceTempView("joined")
+
+# COMMAND ----------
+
+joined.printSchema()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Some of the features we believe will be the most important are wind speed, visibility, current atmospheric conditions (categorical), and current rain and snow depths. Let's examine these distributions with departure delays:
+
+# COMMAND ----------
+
+# delays by day of year for a single year and airport
+display(sqlContext.sql("""
+SELECT
+  origin_WND_speed_rate,
+  SUM(dep_del15) / COUNT(*) as pct_delays
+FROM joined
+GROUP BY origin_WND_speed_rate
+ORDER BY origin_WND_speed_rate"""))
+
+display(sqlContext.sql("""
+SELECT
+  origin_VIS_distance,
+  SUM(dep_del15) / COUNT(*) as pct_delays
+FROM joined
+GROUP BY origin_VIS_distance
+ORDER BY origin_VIS_distance"""))
+
+display(sqlContext.sql("""
+SELECT
+  origin_aw1_automated_atmospheric_condition,
+  SUM(dep_del15) / COUNT(*) as pct_delays
+FROM joined
+GROUP BY origin_aw1_automated_atmospheric_condition
+ORDER BY origin_aw1_automated_atmospheric_condition"""))
+
+display(sqlContext.sql("""
+SELECT
+  origin_aj1_snow_depth,
+  SUM(dep_del15) / COUNT(*) as pct_delays
+FROM joined
+GROUP BY origin_aj1_snow_depth
+ORDER BY origin_aj1_snow_depth"""))
+
+display(sqlContext.sql("""
+SELECT
+  origin_aa1_rain_depth,
+  SUM(dep_del15) / COUNT(*) as pct_delays
+FROM joined
+GROUP BY origin_aa1_rain_depth
+ORDER BY origin_aa1_rain_depth"""))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC As we can see from the above distributions these features appear to have strong correlations with departure delays and will be useful in our models.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC With a basic understanding of the features we have to use for our model we will next discuss the various feature engineering techniques we employed to get even more signal out of the provided data.
 
 # COMMAND ----------
 
