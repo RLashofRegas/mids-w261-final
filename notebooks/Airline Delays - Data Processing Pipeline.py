@@ -51,10 +51,8 @@ weather_airline_joined_path = final_project_path + "intermediate_files/weather_a
 
 #Processed Data Files
 train_data_output_path = final_project_path + "training_data_output/train.parquet"
-validation_data_output_path = final_project_path + "training_data_output/validation.parquet"
 test_data_output_path = final_project_path + "training_data_output/test.parquet"
 train_data_output_path_one_hot = final_project_path + "training_data_output/train_one_hot.parquet"
-validation_data_output_path_one_hot = final_project_path + "training_data_output/validation_one_hot.parquet"
 test_data_output_path_one_hot = final_project_path + "training_data_output/test_one_hot.parquet"
 
 # COMMAND ----------
@@ -724,13 +722,13 @@ weather_airline_joined.write.format("parquet").mode("overwrite").save(weather_ai
 # COMMAND ----------
 
 #Read files back in from parquet and store in same variables
-weather_airline_joined = spark.read.option("header", "true").parquet(weather_airline_joined_full) # joined airline weather dataset
+weather_airline_joined = spark.read.option("header", "true").parquet(weather_airline_joined_path) # joined airline weather dataset
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ### Train/Test Split and Save Data
-# MAGIC In this section we take the joined data from above and split it into train, validation, and test sets. For this dataset we choose to perform our train-test split using the years of data (2015-17 for train, 2018 for validation, and 2019 for test). This choice has two primary benefits:
+# MAGIC In this section we take the joined data from above and split it into train and test sets. For this dataset we choose to perform our train-test split using the years of data (2015-18 for train and 2019 for test). This choice has two primary benefits:
 # MAGIC 1. We maintain relational data elements between the flights. This includes flights for the same day for calculating aggregated data by airport and chain delays for a given tail number for our feature engineering, as well as time-based patterns such as yearly seasonality, holidays, and flights over the course of the day.
 # MAGIC 2. This aligns with a real world business process. In a real world scenario we would be using data from previous years to predict the next year.
 # MAGIC 
@@ -744,8 +742,7 @@ weather_airline_joined = spark.read.option("header", "true").parquet(weather_air
 cached_join = weather_airline_joined.cache()
 
 # perform train/test split based on year
-train_set = cached_join.where((col("year") == '2015') | (col("year") == '2016') | (col("year") == '2017')).cache()
-val_set = cached_join.where((col("year") == '2018')).cache()
+train_set = cached_join.where((col("year") == '2015') | (col("year") == '2016') | (col("year") == '2017') | (col("year") == '2018')).cache()
 test_set = cached_join.where((col("year") == '2019')).cache()
 
 # COMMAND ----------
@@ -754,7 +751,6 @@ test_set = cached_join.where((col("year") == '2019')).cache()
 labelIndexer = StringIndexer(inputCol="dep_del15", outputCol="label").setHandleInvalid("keep").fit(train_set)
 
 train_set = labelIndexer.transform(train_set)
-val_set = labelIndexer.transform(val_set)
 test_set = labelIndexer.transform(test_set)
 
 # Index features
@@ -764,7 +760,6 @@ categorical_index = [i + "_Index" for i in categorical]
   
 stringIndexer = StringIndexer(inputCols=categorical, outputCols=categorical_index).setHandleInvalid("keep").fit(train_set)
 train_set = stringIndexer.transform(train_set)
-val_set = stringIndexer.transform(val_set)
 test_set = stringIndexer.transform(test_set)
 
 # COMMAND ----------
@@ -776,13 +771,11 @@ features = categorical_index + numeric
 assembler = VectorAssembler(inputCols=features, outputCol="features").setHandleInvalid("keep")
 
 train_set = assembler.transform(train_set)
-val_set = assembler.transform(val_set)
 test_set = assembler.transform(test_set)
 
 # COMMAND ----------
 
 train_set.write.format("parquet").mode("overwrite").save(train_data_output_path)
-val_set.write.format("parquet").mode("overwrite").save(validation_data_output_path)
 test_set.write.format("parquet").mode("overwrite").save(test_data_output_path)
 
 # COMMAND ----------
@@ -800,13 +793,11 @@ list_encoders = [i + "_Indicator" for i in categorical]
 encoder = OneHotEncoder(inputCols=categorical_index, outputCols=list_encoders).setHandleInvalid("keep").fit(train_set)
 
 train_one_hot = encoder.transform(train_set)
-val_one_hot = encoder.transform(val_set)
 test_one_hot = encoder.transform(test_set)
 
 # COMMAND ----------
 
 train_one_hot.write.format("parquet").mode("overwrite").save(train_data_output_path_one_hot)
-val_one_hot.write.format("parquet").mode("overwrite").save(validation_data_output_path_one_hot)
 test_one_hot.write.format("parquet").mode("overwrite").save(test_data_output_path_one_hot)
 
 # COMMAND ----------
