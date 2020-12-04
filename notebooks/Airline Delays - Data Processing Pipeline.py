@@ -43,6 +43,13 @@ airlines_data_path = "dbfs:/mnt/mids-w261/datasets_final_project/parquet_airline
 city_timezone_path = final_project_path + "city_timezones.csv"
 
 # output paths
+#Intermediate Files
+airlines_processed = final_project_path + "intermediate_files/airlines_processed.parquet"
+weather_processed = final_project_path + "intermediate_files/weather_processed.parquet"
+airlines_processed_engineered = final_project_path + "intermediate_files/airlines_processed_engineered.parquet"
+weather_airline_joined_path = final_project_path + "intermediate_files/weather_airline_joined.parquet"
+
+#Processed Data Files
 train_data_output_path = final_project_path + "training_data_output/train.parquet"
 validation_data_output_path = final_project_path + "training_data_output/validation.parquet"
 test_data_output_path = final_project_path + "training_data_output/test.parquet"
@@ -405,6 +412,18 @@ weather.createOrReplaceTempView("weather")
 
 # COMMAND ----------
 
+# Save intermediate files to parquet to enhance workflow efficiency
+airlines.write.format("parquet").mode("overwrite").save(airlines_processed)
+weather.write.format("parquet").mode("overwrite").save(weather_processed)
+
+# COMMAND ----------
+
+#Read files back in from parquet and store in same variables
+airlines = spark.read.option("header", "true").parquet(airlines_processed) # processed airline dataset
+weather = spark.read.option("header", "true").parquet(weather_processed) # processed weather dataset
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ### Feature Engineering
 # MAGIC In this section we take the basic parsed versions of the weather and airlines data above and perform some feature engineering to add a few columns we think will be useful. We focus on two categories of delays - chain delays and root cause delays. The `delays_by_airport`, `delays_by_carrier` (also grouped by airport), and `Holiday` features attempt to capture root cause delays. The `chain_delay_feature_engineering` function joins on `tail_num` in order to capture previous delays for the same physical airplane on a given day (chain delays).
@@ -595,6 +614,16 @@ airlines.createOrReplaceTempView("airlines")
 
 # COMMAND ----------
 
+# Save intermediate files to parquet to enhance workflow efficiency
+airlines.write.format("parquet").mode("overwrite").save(airlines_processed_engineered)
+
+# COMMAND ----------
+
+#Read files back in from parquet and store in same variables
+airlines = spark.read.option("header", "true").parquet(airlines_processed_engineered) # processed airline dataset
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ### Join Airlines to Weather Data
 # MAGIC In this section we do the final join between airlines and weather data (for both origin and destination airports). We make sure to only join each flight to weather data from at least 2 hours before the scheduled departure of the flight.
@@ -689,6 +718,16 @@ LEFT JOIN delays_by_carrier AS dco ON
 
 # COMMAND ----------
 
+# Save intermediate files to parquet to enhance workflow efficiency
+weather_airline_joined.write.format("parquet").mode("overwrite").save(weather_airline_joined_path)
+
+# COMMAND ----------
+
+#Read files back in from parquet and store in same variables
+weather_airline_joined = spark.read.option("header", "true").parquet(weather_airline_joined_full) # joined airline weather dataset
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ### Train/Test Split and Save Data
 # MAGIC In this section we take the joined data from above and split it into train, validation, and test sets. For this dataset we choose to perform our train-test split using the years of data (2015-17 for train, 2018 for validation, and 2019 for test). This choice has two primary benefits:
@@ -769,3 +808,6 @@ test_one_hot = encoder.transform(test_set)
 train_one_hot.write.format("parquet").mode("overwrite").save(train_data_output_path_one_hot)
 val_one_hot.write.format("parquet").mode("overwrite").save(validation_data_output_path_one_hot)
 test_one_hot.write.format("parquet").mode("overwrite").save(test_data_output_path_one_hot)
+
+# COMMAND ----------
+
