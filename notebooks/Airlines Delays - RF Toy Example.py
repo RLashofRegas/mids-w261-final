@@ -116,18 +116,19 @@ display(RF_model)
 # MAGIC $$
 # MAGIC \begin{aligned}
 # MAGIC \hat{Y}\_{i,m} &= \begin{cases}
-# MAGIC 0 &\text{if } \hat{p}\_{m,0} \gt \hat{p}\_{m,1} \\\
-# MAGIC 1 &\text{if } \hat{p}\_{m,0} \lt \hat{p}\_{m,1}
+# MAGIC 0 &\text{if } \hat{p}\_{m,k=0} \gt \hat{p}\_{m,k=1} \\\
+# MAGIC 1 &\text{if } \hat{p}\_{m,k=0} \lt \hat{p}\_{m,k=1}
 # MAGIC \end{cases}
 # MAGIC \end{aligned}
 # MAGIC $$
 # MAGIC 
 # MAGIC RF then combines these predictions for all trees using a majority vote.  
+# MAGIC \\(\hat{Y}\_{i, n}\\) is the prediction for test example \\(i\\) using \\(n\\) trees and \\(\hat{p}\_{Y,n}\\) is the proportion of trees with prediction \\(Y\\).
 # MAGIC $$
 # MAGIC \begin{aligned}
 # MAGIC \hat{Y}\_{i,n} &= \begin{cases}
-# MAGIC 0 &\text{if } \hat{p}\_{m,0} \gt \hat{p}\_{m,1} \\\
-# MAGIC 1 &\text{if } \hat{p}\_{m,0} \lt \hat{p}\_{m,1}
+# MAGIC 0 &\text{if } \hat{p}\_{Y=0,n} \gt \hat{p}\_{Y=1,n} \\\
+# MAGIC 1 &\text{if } \hat{p}\_{Y=0,n} \lt \hat{p}\_{Y=1,n}
 # MAGIC \end{cases}
 # MAGIC \end{aligned}
 # MAGIC $$
