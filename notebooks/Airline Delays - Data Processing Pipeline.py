@@ -69,6 +69,32 @@ city_timezone = spark.read.option("header", "false").csv(city_timezone_path) # t
 
 # COMMAND ----------
 
+# Remove cancelled flights from train data since these do not provide clear delay/no delay labels
+airlines = airlines.where(col("cancelled") != 1)
+
+# COMMAND ----------
+
+# Remove or impute flights with no outcome variable dep_del15 for training
+def outcome_variable(dep_del15, crs_dep_time, dep_time):
+    """
+    Function that labels outcome variable as not delayed if it is null and scheduled departure time and departure time are equal.
+    """
+    if dep_del15 == None:
+        if crs_dep_time == dep_time:
+            dep_del15 = 0
+        else:
+            dep_del15 = None
+    else:
+        dep_del15 = dep_del15
+        
+    return dep_del15
+  
+outcome_variable_udf = f.udf(outcome_variable, StringType())
+airlines = airlines.withColumn("dep_del15", outcome_variable_udf("dep_del15", "crs_dep_time", "dep_time"))
+airlines = airlines.where(col("dep_del15").isNotNull())
+
+# COMMAND ----------
+
 # clean up origin and destination city names for join to timezone data
 
 def split_city_name(city_state):
@@ -669,12 +695,6 @@ cached_join = weather_airline_joined.cache()
 train_set = cached_join.where((col("year") == '2015') | (col("year") == '2016') | (col("year") == '2017')).cache()
 val_set = cached_join.where((col("year") == '2018')).cache()
 test_set = cached_join.where((col("year") == '2019')).cache()
-
-# COMMAND ----------
-
-# Remove flights with no outcome variable dep_del15 for training
-# Remove cancelled flights, since these do not provide clear delay/no delay labels for training
-train_set = train_set.where((col("dep_del15").isNotNull()) & (col("cancelled") != 1))
 
 # COMMAND ----------
 
