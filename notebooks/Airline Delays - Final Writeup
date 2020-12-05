@@ -251,6 +251,36 @@ ORDER BY origin_aa1_rain_depth"""))
 
 # MAGIC %md
 # MAGIC ## Course Concepts
+# MAGIC ### Data Modeling Pipeline
+# MAGIC 
+# MAGIC In working through this project, we worked systematically to create a data modeling pipeline to address the business problem of airline flight delay prediction. To accomplish this, we relied on the data modeling framework of analyzing and understanding the domain and requirements, ingestion of data (including provided and external sources), exploratory data analysis, feature engineering and model building. While the foundation of this framework was sequential, with one step generally leading to the next, we often had to return to previous steps in the pipeline to optimize our model. For example, after running our classification model and identifying gaps in our prediction space, we returned to the feature engineering step to build features that would provide more relevant signal for our model to use in its predictions.
+# MAGIC 
+# MAGIC The scope of this project was limited to model building. In future work, however, we could implement lab-based experiments to determine if our results are robust to greater scrutiny. And finally, we could deploy our model into a production environment with fault-tolerant infrastructure capable of ingestion for real-time predictions.
+# MAGIC 
+# MAGIC ### Bias-Variance Tradeoff
+# MAGIC 
+# MAGIC The bias-variance trade off describes the conflict between the two major sources of error in supervised machine learning that prevents algorithms from generalizing to unseen data. The error resulting from bias refers to error resulting from inadequete accounting of relevant relations between the input and output variables, also called underfitting, while the variance refers to error from over accounting of relations between input and output, also called overfitting.
+# MAGIC    
+# MAGIC Since we were working heavily with our training data before a final evaluation on the test set, we took steps to mitigate the risk of overfitting. Firstly, we used k-fold cross validation to help detect signs that we were overfitting as we optimized our model. Secondly, we adjusted the hyperparameters of our random forest model to avoid overfitting. By keeping a minimum tree depth, we limited the complexity of our models and discouraged it from modeling random noise in the training data. And by increasing the number of trees in the random forest, we increased the population of decision trees with low correlation to each other.
+# MAGIC 
+# MAGIC ### Spark and Parellel Frameworks
+# MAGIC   
+# MAGIC We were able to accomplish training and testing over tens of millions of records thanks to Spark and its parallel computing framework. Spark borrows many principles behind the functional programming paradigm to enable efficiency on large data sets. Below are some of the big data methodologies that allowed us to accomplish this project at scale.
+# MAGIC   
+# MAGIC ##### Higher order functions
+# MAGIC Where possible we leveraged Spark's built in functions such as filter and aggregate. When build in functions were not available to serve our needs, we used udf's applied as lambda functions in parallel on the data.
+# MAGIC   
+# MAGIC ##### High-level of Abstraction 
+# MAGIC Working at the Spark Dataframe level was the correct level of absraction for us in this project. It allowed for a quick workflow and pipeline build without concerning ourselves with low-level optimizations. In future work, however, it would likely be necessary to make lower level optimizations when our model was moved into deployment and production.
+# MAGIC   
+# MAGIC ##### Parquet Storage
+# MAGIC Storing our data in parquet allowed for rapid aggregations due to Parquet's columnar storage nature. Parquet's efficient compression and querying abilities were ideal for working with our large datasets in this project.
+# MAGIC   
+# MAGIC   
+# MAGIC ##### Parallel Models  
+# MAGIC Both our intial logistic regression model and our final random forest model were implemented in parallel through Spark ML. This allowed us to build models on our large dataset. Here we will consider the implementation of the random forest and how it was performed on our data.
+# MAGIC 
+# MAGIC At the level of each tree, the implementation in Spark is similar to the Planet algorithm designed by Panda et al. Spark builds trees one level at a time. The data is partitioned across mappers and each mapper considers a number of possible split points for its subset of the data. Each mapper determines parital statistics and passes to the reducer where split points are determined based on aggregate statistics, thus growing each tree one level at a time. In a random forest, each tree can also be grown in parallel because, unlike with gradient boosted trees, each tree in a random forest is grown with a random subset of features, independent of others.
 
 # COMMAND ----------
 
