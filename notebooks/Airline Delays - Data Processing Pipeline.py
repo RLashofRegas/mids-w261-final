@@ -454,6 +454,30 @@ weather = spark.read.option("header", "true").parquet(weather_processed) # proce
 
 # COMMAND ----------
 
+# Aggregate delays by airport (not time based)
+sqlContext.sql("""
+DROP VIEW IF EXISTS delays_by_airport_total
+""")
+sqlContext.sql("""
+CREATE TEMPORARY VIEW delays_by_airport_total
+AS
+SELECT
+  a.origin,
+  IFNULL(COUNT(*), 0) AS num_flights,
+  IFNULL(AVG(dep_delay), 0) AS avg_dep_delay,
+  IFNULL(AVG(dep_del15), 0) AS pct_dep_del15,
+  IFNULL(AVG(taxi_out), 0) AS avg_taxi_time,
+  IFNULL(AVG(weather_delay), 0) AS avg_weather_delay,
+  IFNULL(AVG(nas_delay), 0) AS avg_nas_delay,
+  IFNULL(AVG(security_delay), 0) AS avg_security_delay,
+  IFNULL(AVG(late_aircraft_delay), 0) AS avg_late_aircraft_delay
+FROM airlines AS a
+GROUP BY
+  a.origin
+""")
+
+# COMMAND ----------
+
 # Aggregate delays by airport and hour
 sqlContext.sql("""
 DROP VIEW IF EXISTS delays_by_airport
@@ -464,15 +488,17 @@ AS
 SELECT
   a.origin,
   a.truncated_crs_dep_time_utc AS hour,
-  COUNT(*) AS num_flights,
-  AVG(dep_delay) AS avg_dep_delay,
-  AVG(dep_del15) AS pct_dep_del15,
-  AVG(taxi_out) AS avg_taxi_time,
-  AVG(weather_delay) AS avg_weather_delay,
-  AVG(nas_delay) AS avg_nas_delay,
-  AVG(security_delay) AS avg_security_delay,
-  AVG(late_aircraft_delay) AS avg_late_aircraft_delay
+  IFNULL(COUNT(*), 0) / at.num_flights AS num_flights,
+  IFNULL(AVG(dep_delay), 0) / IF(at.avg_dep_delay == 0, 0.1, at.avg_dep_delay) AS avg_dep_delay,
+  IFNULL(AVG(dep_del15), 0) / IF(at.pct_dep_del15 == 0, 0.1, at.pct_dep_del15) AS pct_dep_del15,
+  IFNULL(AVG(taxi_out), 0) / IF(at.avg_taxi_time == 0, 0.1, at.avg_taxi_time) AS avg_taxi_time,
+  IFNULL(AVG(weather_delay), 0) / IF(at.avg_weather_delay == 0, 0.1, at.avg_weather_delay) AS avg_weather_delay,
+  IFNULL(AVG(nas_delay), 0) / IF(at.avg_nas_delay == 0, 0.1, at.avg_nas_delay) AS avg_nas_delay,
+  IFNULL(AVG(security_delay), 0) / IF(at.avg_security_delay == 0, 0.1, at.avg_security_delay) AS avg_security_delay,
+  IFNULL(AVG(late_aircraft_delay), 0) / IF(at.avg_late_aircraft_delay == 0, 0.1, at.avg_late_aircraft_delay) AS avg_late_aircraft_delay
 FROM airlines AS a
+INNER JOIN delays_by_airport_total AS at ON
+  a.origin = at.origin
 GROUP BY
   a.origin,
   a.truncated_crs_dep_time_utc
@@ -491,9 +517,9 @@ SELECT
   a.origin,
   a.op_unique_carrier,
   a.truncated_crs_dep_time_utc AS hour,
-  COUNT(*) AS num_flights,
-  AVG(dep_delay) AS avg_dep_delay,
-  AVG(carrier_delay) AS avg_carrier_delay
+  IFNULL(COUNT(*), 0) AS num_flights,
+  IFNULL(AVG(dep_delay), 0) AS avg_dep_delay,
+  IFNULL(AVG(carrier_delay), 0) AS avg_carrier_delay
 FROM airlines AS a
 GROUP BY
   a.origin,
