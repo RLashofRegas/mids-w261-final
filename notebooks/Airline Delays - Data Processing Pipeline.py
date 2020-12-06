@@ -177,6 +177,8 @@ SELECT
   dep_del15,
   cancelled,
   diverted,
+  distance,
+  distance_group,
   short_dest_city_name,
   short_orig_city_name,
   carrier_delay,
@@ -276,7 +278,9 @@ SELECT
   wr.slp,
   wr.airport_code,
   wr.hour,
-  wr.aw1
+  wr.aw1,
+  wr.aj1,
+  wr.aa1
 FROM weather_ranked AS wr
 WHERE
   wr.rank = 1
@@ -297,8 +301,9 @@ def wind_parse(df,column_name='WND'):
   split_col = f.split(df[column_name], ',')
   
   #direction angle  999 = Missing. If type code (below) = V, then 999 indicates variable wind direction.
-  direction_angle_udf = udf(lambda x: None if x == "999" else x,IntegerType())
+  direction_angle_udf = udf(lambda x: None if x == "999" else x)
   df = df.withColumn(column_name + '_direction_angle', direction_angle_udf(split_col.getItem(0)))
+  df = df.withColumn(column_name + '_direction_angle', df[column_name + '_direction_angle'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_direction_quality', split_col.getItem(1))
   
@@ -307,14 +312,9 @@ def wind_parse(df,column_name='WND'):
   df = df.withColumn(column_name + '_type_code', wind_type_udf(split_col.getItem(2)))
   
   #speed rate 9999 = Missing, fix formatting to be integer MIN: 0000 MAX: 0900
-  speed_udf = udf(lambda x: None if x == "9999" else x,IntegerType())
+  speed_udf = udf(lambda x: None if x == "9999" else x)
   df = df.withColumn(column_name + '_speed_rate', speed_udf(split_col.getItem(3))) #Likely most important code
-  
-  #WIND-OBSERVATION type code  NOTE: If a value of 9 appears with a wind speed of 0000, this indicates calm winds.
-  #df = df.withColumn(column_name + '_type_code', f.when(df[column_name + '_speed_rate'] == '0000' & df[column_name + '_type_code'] == 'null', "Calm")
-  
-  ##direction angle  999 = Missing. If type code (below) = V, then 999 indicates variable wind direction.
-  ###
+  df = df.withColumn(column_name + '_speed_rate', df[column_name + '_speed_rate'].cast(IntegerType()))
 
   df = df.withColumn(column_name + '_speed__quality', split_col.getItem(4))
   return df
@@ -322,8 +322,9 @@ def wind_parse(df,column_name='WND'):
 def sky_parse(df,column_name='CIG'):
   split_col = f.split(df[column_name], ',')
   
-  ceiling_height_udf = udf(lambda x: None if x == "99999" else x,IntegerType())
+  ceiling_height_udf = udf(lambda x: None if x == "99999" else x)
   df = df.withColumn(column_name + '_ceiling_height', ceiling_height_udf(split_col.getItem(0)))
+  df = df.withColumn(column_name + '_ceiling_height', df[column_name + '_ceiling_height'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_ceiling_quality', split_col.getItem(1))
   
@@ -336,9 +337,9 @@ def sky_parse(df,column_name='CIG'):
 def visibility_parse(df,column_name='VIS'):
   split_col = f.split(df[column_name], ',')
   
-  vis_distance_udf = udf(lambda x: None if x == "999999" else x,IntegerType())
+  vis_distance_udf = udf(lambda x: None if x == "999999" else x)
   df = df.withColumn(column_name + '_distance', vis_distance_udf(split_col.getItem(0))) #Likely most important code
-  
+  df = df.withColumn(column_name + '_distance', df[column_name + '_distance'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_distance_quality', split_col.getItem(1))
   
@@ -351,8 +352,9 @@ def visibility_parse(df,column_name='VIS'):
 def tmp_parse(df,column_name='TMP'):
   split_col = f.split(df[column_name], ',')
   
-  air_temp_udf = udf(lambda x: None if x == "+9999" else x,IntegerType())
+  air_temp_udf = udf(lambda x: None if x == "+9999" else x)
   df = df.withColumn(column_name + '_air_temperature', air_temp_udf(split_col.getItem(0))) #Likely most important code
+  df = df.withColumn(column_name + '_air_temperature', df[column_name + '_air_temperature'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_air_temperature_quality', split_col.getItem(1))
   return df
@@ -360,8 +362,9 @@ def tmp_parse(df,column_name='TMP'):
 def dew_parse(df,column_name='DEW'):
   split_col = f.split(df[column_name], ',')
   
-  dew_temp_udf = udf(lambda x: None if x == "+9999" else x,IntegerType())
+  dew_temp_udf = udf(lambda x: None if x == "+9999" else x)
   df = df.withColumn(column_name + '_dew_point_temp', dew_temp_udf(split_col.getItem(0))) #Likely most important code
+  df = df.withColumn(column_name + '_dew_point_temp', df[column_name + '_dew_point_temp'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_dew_point_temp_quality', split_col.getItem(1))
   return df
@@ -369,8 +372,9 @@ def dew_parse(df,column_name='DEW'):
 def slp_parse(df,column_name='SLP'):
   split_col = f.split(df[column_name], ',')
   
-  slp_udf = udf(lambda x: None if x == "99999" else x,IntegerType())
+  slp_udf = udf(lambda x: None if x == "99999" else x)
   df = df.withColumn(column_name + '_sea_level_pressure', slp_udf(split_col.getItem(0))) #Likely most important code, low-pressure system moves into an area, it usually leads to cloudiness, wind, and precipitation
+  df = df.withColumn(column_name + '_sea_level_pressure', df[column_name + '_sea_level_pressure'].cast(IntegerType()))
   
   df = df.withColumn(column_name + '_sea_level_pressure_quality', split_col.getItem(1))
   return df
@@ -382,8 +386,9 @@ def slp_parse(df,column_name='SLP'):
 # Automated_atmospheric_condition codes are used to report precipitation, fog, thunderstorm at the station during the preceding hour, but not at the time of observation.)
 def present_weather_parse(df,column_name='AW1'):
 #When string is empty put in a filler to enable parsing
-  blank_string_udf = udf(lambda x: "," if x == "" else x, StringType())
+  blank_string_udf = udf(lambda x: "," if x == "" else x)
   df = df.withColumn("AW1_New", blank_string_udf(df[column_name]))
+  
   split_col = f.split(df["AW1_New"], ',')
   
 #Replace missing data with nulls   
@@ -393,6 +398,29 @@ def present_weather_parse(df,column_name='AW1'):
   
   return df
 
+#SNOW DEPTH AT TIME OF READING- ASSUMPTION IS THAT A BLANK READING INDICATES 0 SNOW DEPTH
+def snow_dimension_parse(df,column_name = 'AJ1'):
+  '''Parse 1st item of aj1 reading. '''
+  split_col = f.split(df[column_name], ',')
+  
+  snow_depth_udf = udf(lambda x: None if x == "9999" else (x if x else "0"))
+  df = df.withColumn(column_name + '_snow_depth', snow_depth_udf(split_col.getItem(0))) #Likely most important code
+  df = df.withColumn(column_name + '_snow_depth', df[column_name + '_snow_depth'].cast(IntegerType()))
+
+  return df
+
+#RAIN DEPTH AT TIME OF READING- ASSUMPTION IS THAT A BLANK READING INDICATES 0 RAIN DEPTH
+def rain_dimension_parse(df,column_name = 'AA1'):
+  '''Parse 2nd item of AA1 reading'''
+  split_col = f.split(df[column_name], ',')
+  
+  snow_depth_udf = udf(lambda x: None if x == "9999" else (x if x else "0"))
+  df = df.withColumn(column_name + '_rain_depth', snow_depth_udf(split_col.getItem(1))) #Likely most important code
+  df = df.withColumn(column_name + '_rain_depth', df[column_name + '_rain_depth'].cast(IntegerType()))
+
+  return df
+ 
+
 weather = wind_parse(weather)  
 weather = sky_parse(weather)  
 weather = visibility_parse(weather)  
@@ -400,6 +428,8 @@ weather = tmp_parse(weather)
 weather = dew_parse(weather)  
 weather = slp_parse(weather)  
 weather = present_weather_parse(weather)
+weather = snow_dimension_parse(weather)
+weather = rain_dimension_parse(weather)
 weather = weather.cache()
 
 weather.createOrReplaceTempView("weather")
@@ -482,7 +512,6 @@ def holiday_column(airline_df, start='2014-01-01', end='2018-12-31'):
   holidays = cal.holidays(start, end).to_pydatetime()
   holidays_df = pd.DataFrame(pd.DataFrame(holidays)[0].astype('string'))
   schema = StructType([StructField('Holiday_Date', StringType())])
-  #holidays_sc = sc.parallelize(pd.DataFrame(holidays_df)).toDF(['Holiday_Date'])
   holidays_sc = spark.createDataFrame(holidays_df, schema)
   holidays_sc = holidays_sc.select(to_timestamp(holidays_sc.Holiday_Date, 'yyyy-MM-dd').alias('holiday_date'))
   
@@ -559,9 +588,9 @@ def chain_delay_feature_engineering(airline_df):
   join_columns = ["tail_num","fl_date","origin_city_name", "dest_city_name", "crs_dep_time_utc"]
   
   airlines_chain_delays = airline_df_with_id.alias("a").join(airlines_aircraft_tracking_diff_for_join.alias("j"), join_columns, 'left_outer') \
-                            .select('a.year', 'a.quarter', 'a.month', 'a.day_of_week', 'a.fl_date', 'a.op_unique_carrier', 'a.tail_num', 'a.origin_airport_id', 'a.origin', 'a.origin_city_name', 'a.dest_airport_id', 'a.dest', 'a.dest_city_name', 'a.crs_dep_time', 'a.dep_time', 'a.dep_delay', 'a.dep_del15', 'a.cancelled', 'a.diverted', 'a.short_dest_city_name', 'a.short_orig_city_name', 'a.carrier_delay', 'a.weather_delay', 'a.nas_delay', 'a.security_delay', 'a.late_aircraft_delay', 'a.taxi_out', 'a.dest_timezone', 'a.origin_timezone', 'a.truncated_crs_dep_time_utc', 'a.truncated_crs_dep_minus_three_utc', 'a.crs_dep_time_utc', 'a.crs_dep_minus_two_fifteen_utc', 'a.Holiday', 'a.id', 'j.dep_time_diff_one_flight_before', 'j.dep_time_diff_two_flights_before', 'j.delay_one_before', 'j.delay_two_before', 'j.PREVIOUS_FLIGHT_DELAYED_FOR_MODELS')
+                            .select('a.year', 'a.quarter', 'a.month', 'a.day_of_week', 'a.fl_date', 'a.op_unique_carrier', 'a.tail_num', 'a.origin_airport_id', 'a.origin', 'a.origin_city_name', 'a.dest_airport_id', 'a.dest', 'a.dest_city_name', 'a.crs_dep_time', 'a.dep_time', 'a.dep_delay', 'a.dep_del15', 'a.cancelled', 'a.diverted', 'a.distance', 'a.distance_group', 'a.short_dest_city_name', 'a.short_orig_city_name', 'a.carrier_delay', 'a.weather_delay', 'a.nas_delay', 'a.security_delay', 'a.late_aircraft_delay', 'a.taxi_out', 'a.dest_timezone', 'a.origin_timezone', 'a.truncated_crs_dep_time_utc', 'a.truncated_crs_dep_minus_three_utc', 'a.crs_dep_time_utc', 'a.crs_dep_minus_two_fifteen_utc', 'a.Holiday', 'a.id', 'j.dep_time_diff_one_flight_before', 'j.dep_time_diff_two_flights_before', 'j.delay_one_before', 'j.delay_two_before', 'j.PREVIOUS_FLIGHT_DELAYED_FOR_MODELS')
   
-  #Drop duplicates created during join. Is there a better way?
+  #Drop duplicates created during join. 
   airlines_chain_delays_no_dups = airlines_chain_delays.dropDuplicates(['id'])
   
   return airlines_chain_delays_no_dups
@@ -571,16 +600,6 @@ airlines = chain_delay_feature_engineering(airlines)
 
 # replace temp view
 airlines.createOrReplaceTempView("airlines")
-
-# COMMAND ----------
-
-# Bin departure times
-## splits = [400,800,1200,1600,2000,2400]
-## bucketizer = Bucketizer(splits=splits, inputCol="crs_dep_time", outputCol="CRS_DEP_TIME_Daypart")
-## airlines = bucketizer.transform(airlines).cache()
-
-# replace temp view
-## airlines.createOrReplaceTempView("airlines")
 
 # COMMAND ----------
 
@@ -662,6 +681,8 @@ SELECT
   wo.SLP_sea_level_pressure_quality AS origin_SLP_sea_level_pressure_quality,
   wo.aw1_automated_atmospheric_condition AS origin_aw1_automated_atmospheric_condition,
   wo.aw1_quality_automated_atmospheric_condition AS origin_aw1_quality_automated_atmospheric_condition,
+  wo.aj1_snow_depth AS origin_aj1_snow_depth,
+  wo.aa1_rain_depth AS origin_aa1_rain_depth,
   wd.WND_direction_angle AS dest_WND_direction_angle,  
   wd.WND_direction_quality AS dest_WND_direction_quality,
   wd.WND_type_code AS dest_WND_type_code,
@@ -681,7 +702,9 @@ SELECT
   wd.SLP_sea_level_pressure AS dest_SLP_sea_level_pressure,
   wd.SLP_sea_level_pressure_quality AS dest_SLP_sea_level_pressure_quality,
   wd.aw1_automated_atmospheric_condition AS dest_aw1_automated_atmospheric_condition,
-  wd.aw1_quality_automated_atmospheric_condition AS dest_aw1_quality_automated_atmospheric_condition
+  wd.aw1_quality_automated_atmospheric_condition AS dest_aw1_quality_automated_atmospheric_condition,
+  wd.aj1_snow_depth AS dest_aj1_snow_depth,
+  wd.aa1_rain_depth AS dest_aa1_rain_depth
 FROM airlines AS f
 LEFT JOIN weather AS wo ON
   f.origin = wo.airport_code
@@ -700,6 +723,39 @@ LEFT JOIN delays_by_carrier AS dco ON
   AND f.truncated_crs_dep_minus_three_utc = dco.hour
   AND f.op_unique_carrier = dco.op_unique_carrier
 """)
+
+# COMMAND ----------
+
+# MAGIC %md 
+# MAGIC ### Origin Weather Feature Engineering 
+# MAGIC We also created weather indicator features that highlight weather patterns that we have seen are associated with weather delays such as having a ceiling height below 2000. 
+
+# COMMAND ----------
+
+def weather_indicators(df):
+  '''Takes weather dataframe and created indicator variables based on weather patterns associated with weather delays'''
+  
+  #Create custom field to indicator if ceiling height is below 2000
+  ceiling_indicator_udf = udf(lambda x: 0 if x == None else (0 if x >= 2000 else 1))
+  df = df.withColumn('ceiling_indicator_below_2000', ceiling_indicator_udf(df.origin_CIG_ceiling_height))
+  df = df.withColumn('ceiling_indicator_below_2000', df['ceiling_indicator_below_2000'].cast(IntegerType()))
+  
+  #Create custom field to indicator if air temp is below zero during summer
+  df = df.withColumn('summer_indicator_below_zero', f.when(f.col('origin_TMP_air_temperature') == None, 0).when(f.col('origin_TMP_air_temperature') >= 0,0).when(f.col('month').isin([1,2,3,4,11,12]), 0).otherwise(1))
+  df = df.withColumn('summer_indicator_below_zero', df['summer_indicator_below_zero'].cast(IntegerType()))  
+  
+  #Create custom field to indicator if dew point temp is above 165 in winter
+  df = df.withColumn('winter_indicator_dew_above_165', f.when(f.col('origin_DEW_dew_point_temp') == None, 0).when(f.col('origin_DEW_dew_point_temp') <= 165,0).when(f.col('month').isin([5,6,7,8,9,10]), 0).otherwise(1))
+  df = df.withColumn('winter_indicator_dew_above_165', df['winter_indicator_dew_above_165'].cast(IntegerType()))  
+  
+  #Create custom field to indicator if wind speed is above 50 
+  wind_indicator_udf = udf(lambda x: 0 if x == None else (0 if x <= 50 else 1))
+  df = df.withColumn('wind_indicator_above_50', wind_indicator_udf(df.origin_WND_speed_rate))
+  df = df.withColumn('wind_indicator_above_50', df['wind_indicator_above_50'].cast(IntegerType()))
+  
+  return df
+
+weather_airline_joined = weather_indicators(weather_airline_joined)
 
 # COMMAND ----------
 
@@ -741,7 +797,7 @@ train_set = labelIndexer.transform(train_set)
 test_set = labelIndexer.transform(test_set)
 
 # Index features
-categorical = ["month", "day_of_week", "op_unique_carrier", "Holiday", "PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", "origin_WND_direction_angle", "origin_WND_type_code", "origin_CIG_ceiling_visibility_okay", "origin_VIS_variability", "dest_WND_direction_angle", "dest_WND_type_code", "dest_CIG_ceiling_visibility_okay", "dest_VIS_variability", "crs_dep_hour"]
+categorical = ["month", "day_of_week", "op_unique_carrier", "Holiday", "PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", "origin_WND_direction_angle", "origin_WND_type_code", "origin_CIG_ceiling_visibility_okay", "origin_VIS_variability", "dest_WND_direction_angle", "dest_WND_type_code", "dest_CIG_ceiling_visibility_okay", "dest_VIS_variability", "crs_dep_hour",'distance_group','origin_airport_id']
 
 categorical_index = [i + "_Index" for i in categorical]
   
@@ -775,5 +831,3 @@ test_one_hot = encoder.transform(test_set)
 
 train_one_hot.write.format("parquet").mode("overwrite").save(train_data_output_path_one_hot)
 test_one_hot.write.format("parquet").mode("overwrite").save(test_data_output_path_one_hot)
-
-# COMMAND ----------
