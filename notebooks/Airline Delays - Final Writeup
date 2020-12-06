@@ -69,9 +69,11 @@ airlines_data_path = "dbfs:/mnt/mids-w261/datasets_final_project/parquet_airline
 
 # read in raw data
 airlines = spark.read.option("header", "true").parquet(airlines_data_path) # full airline dataset
+weather = spark.read.option("header", "true").parquet(weather_data_path) # full airline dataset
 
 # register temp view
 airlines.createOrReplaceTempView("airlines")
+weather.createOrReplaceTempView("weather")
 
 # COMMAND ----------
 
@@ -188,28 +190,45 @@ Plot_Delays_Time(year_distribution_table_pandas.day_of_year,
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC The final relationship that we found useful to explore in the flights data relates to the airport. Building on our concepts of root cause delays and chain delays we would think that on a given day with a significant number of delays we are likely to see a large spike compared to days with a more regular number of delays. This is because as the number of delays on a given day increases, it is more likely that the day in question has a root cause delay such as weather or an airport-wide issue. In addition, as we have more delays on a given day the number of chain delays also increases.
+# MAGIC The final relationship that we found useful to explore in the flights data relates to the airport. Building on our concepts of root cause delays and chain delays we hypothesize that delays will be clustered both by time and airport. This is because adverse weather conditions or airport-wide issues at a location would likely cause multiple root cause. In addition, the effect of these root cause delays would propogate and cause chain delays.
 # MAGIC 
-# MAGIC To understand this it is useful to compare a single airport for a single year as compared to all other airports in the same year. In this case we look at Chicago (ORD) for the year of 2015:
+# MAGIC To understand this, we will view delay percentage by day for the top 5 airports in our data set. If delays are truly clustered, we would expect to see high variance in delay percentage from day to day and betweeen airports. For digestibility we only view Q1 2015.
 
 # COMMAND ----------
 
-# delays by day of year for a single year and airport
-display(sqlContext.sql("""
+# delays by day of year for Q1 2015 at 5 airports
+airport_delay_pct_sample = sqlContext.sql("""
 SELECT
   CAST(DATE_FORMAT(fl_date, 'D') AS INT) AS day_of_year,
   SUM(CASE WHEN origin = 'ORD' THEN dep_del15 ELSE 0 END) / SUM(CASE WHEN origin = 'ORD' THEN 1 ELSE 0 END) AS ord_delay_pct,
-  SUM(CASE WHEN origin <> 'ORD' THEN dep_del15 ELSE 0 END) / SUM(CASE WHEN origin <> 'ORD' THEN 1 ELSE 0 END) AS other_delay_pct
+  SUM(CASE WHEN origin = 'ATL' THEN dep_del15 ELSE 0 END) / SUM(CASE WHEN origin = 'ATL' THEN 1 ELSE 0 END) AS atl_delay_pct,
+  SUM(CASE WHEN origin = 'JFK' THEN dep_del15 ELSE 0 END) / SUM(CASE WHEN origin = 'JFK' THEN 1 ELSE 0 END) AS jfk_delay_pct,
+  SUM(CASE WHEN origin = 'DFW' THEN dep_del15 ELSE 0 END) / SUM(CASE WHEN origin = 'DFW' THEN 1 ELSE 0 END) AS dfw_delay_pct,
+  SUM(CASE WHEN origin = 'SFO' THEN dep_del15 ELSE 0 END) / SUM(CASE WHEN origin = 'SFO' THEN 1 ELSE 0 END) AS sfo_delay_pct  
 FROM airlines
 WHERE
-  year = '2015'
+  year = '2015' and quarter = '1'
 GROUP BY day_of_year
-ORDER BY day_of_year"""))
+ORDER BY day_of_year""")
+
+#Save to pandas df
+airport_delay_pct_sample_table_pandas = airport_delay_pct_sample.toPandas().set_index('day_of_year')
+
+#Plotting heatmap
+fig, ax = plt.subplots(figsize=(10,10)) 
+ax = sns.heatmap(airport_delay_pct_sample_table_pandas, 
+                cmap = 'Blues'
+                )
+ax.set(title = 'Delay Pct by Day (Q1 2015)',
+        xlabel = 'Airport',
+        ylabel = 'Day of Year',
+        xticklabels = ['ORD', 'ATL', 'JFK', 'DFW', 'SFO'])
+plt.show()
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC From the above plot we can see that our theory holds some weight. For example on January 4th ORD had over 70% of flights delayed whereas the national average was 44% and on February 26th ORD had almost 74% delays whereas the national average was only around 30%. This makes it clear that we need to capture airport-level statistics in our feature engineering (which we discuss further in the following section).
+# MAGIC The plot above supports our hypothesis. For example on January 4th ORD had over 70% of flights delayed whereas SFO had only 32%. The data exhibits high variability of delay percentage between airports and days. This makes it clear that we need to capture airport-level statistics in our feature engineering (which we discuss further in the following section).
 
 # COMMAND ----------
 
@@ -230,6 +249,10 @@ display(weather.limit(10))
 # MAGIC Looking at some of the other columns that we would think would be useful such as visibility, wind details, temperature, dew point, etc. we see that they are mostly in a coded format that will require us to parse out the values we need (discussed further in the following section).
 # MAGIC 
 # MAGIC In order to perform some additional EDA on the weather data we read in our saved files that contain some parsed features joined to the flights data:
+
+# COMMAND ----------
+
+#### ADD EDA ON FULL WEATHER DATA TO MOTIVATE WHY WE CHOSE THE FEATURES THAT WE DID
 
 # COMMAND ----------
 
