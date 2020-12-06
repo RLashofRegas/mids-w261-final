@@ -94,6 +94,8 @@ def outcome_variable(dep_del15, crs_dep_time, dep_time):
         
     return dep_del15
   
+airlines = airlines.withColumn('dep_del15', airlines['dep_del15'].cast(IntegerType())) 
+
 outcome_variable_udf = f.udf(outcome_variable, StringType())
 airlines = airlines.withColumn("dep_del15", outcome_variable_udf("dep_del15", "crs_dep_time", "dep_time"))
 airlines = airlines.where(col("dep_del15").isNotNull())
