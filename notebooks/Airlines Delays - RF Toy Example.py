@@ -47,14 +47,6 @@ train_set = spark.read.parquet(train_data_output_path)
 
 # COMMAND ----------
 
-train_set = train_set.where(f.col("label") != 2)
-
-# COMMAND ----------
-
-train_set.printSchema()
-
-# COMMAND ----------
-
 # MAGIC %md ## Algorithm Implementation
 
 # COMMAND ----------
@@ -170,3 +162,17 @@ display(labelAndPrediction_RF.where(labelAndPrediction_RF.row == 575525629176))
 # COMMAND ----------
 
 # MAGIC %md The above test example has the following features: previous flight delayed, average delay at origin airport = 12.9 minutes, scheduled hour of departure delay = 15. The RF model predicts this as a delay.
+
+# COMMAND ----------
+
+# MAGIC %md #### Find test example to use (not for final notebook)
+
+# COMMAND ----------
+
+labelAndPrediction_RF_join = labelAndPrediction_RF.withColumnRenamed("prediction", "prediction_RF").select("prediction_RF", "row")
+labelAndPrediction_join = labelAndPrediction_RF_join.join(labelAndPrediction, "row", "inner")
+display(labelAndPrediction_join.sample(False, 0.0001))
+
+# COMMAND ----------
+
+display(labelAndPrediction_join.where((f.col("label") == f.col("prediction_RF")) & (f.col("label") != f.col("prediction"))))
