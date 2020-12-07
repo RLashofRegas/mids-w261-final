@@ -139,31 +139,34 @@ display(labelAndPrediction.where(labelAndPrediction.row == 575525629176))
 
 # MAGIC %md ##### RF Algorithm
 # MAGIC The method of averaging many trees grown from repeated samples of the training data, or bagging, decreases variance of the model that would occur with any one tree. Bagging grows deep trees and does not prune. The RF training method goes a step further to help guarantee a more reliable result. RF trees are built such that each node is randomly assigned a subset of features that will be considered as possible split candidates. This means that the trees will differ from each other, which when averaged will decrease variance more than bagging alone.  
+# MAGIC 
+# MAGIC Below we will train a RF model on the same data using 3 trees.
 
 # COMMAND ----------
 
 # RF model
-rf = RF(labelCol="label", featuresCol="features", numTrees=10)
+rf = RF(labelCol="label", featuresCol="features", numTrees=3, maxDepth=5)
 RF_model = rf.fit(train_toy)
 
 # COMMAND ----------
 
-RF_model.toDebugString
+# Print tree nodes for all RF trees
+print(RF_model.toDebugString)
 
 # COMMAND ----------
 
 # MAGIC %md ##### Prediction with RF
-# MAGIC RF then combines these predictions for all trees using a majority vote.  
-# MAGIC \\(\hat{Y}\_{i, n}\\) is the prediction for test example \\(i\\) using \\(n\\) trees and \\(\hat{p}\_{Y,n}\\) is the proportion of trees with prediction \\(Y\\).
-# MAGIC $$
-# MAGIC \begin{aligned}
-# MAGIC \hat{Y}\_{i,n} &= \begin{cases}
-# MAGIC 0 &\text{if } \hat{p}\_{Y=0,n} \gt \hat{p}\_{Y=1,n} \\\
-# MAGIC 1 &\text{if } \hat{p}\_{Y=0,n} \lt \hat{p}\_{Y=1,n}
-# MAGIC \end{cases}
-# MAGIC \end{aligned}
-# MAGIC $$
+# MAGIC RF then combines these predictions for all trees using a majority vote. If \\(\hat{p}\_{n,k}\\) is the proportion of predictions for class \\(k\\) over \\(n\\) trees, the majority vote is \\(argmax\_k\\) \\(\hat{p}\_{n,k}\\).
 
 # COMMAND ----------
 
-predictions = 
+# Predict on toy test set with RF
+pred_toy_RF = RF_model.transform(test_toy)
+
+# Create dataframe with predictions and show example
+labelAndPrediction_RF = pred_toy_RF.select("label", "row", "prediction", "features")
+display(labelAndPrediction_RF.where(labelAndPrediction_RF.row == 575525629176))
+
+# COMMAND ----------
+
+# MAGIC %md The above test example has the following features: previous flight delayed, average delay at origin airport = 12.9 minutes, scheduled hour of departure delay = 15. The RF model predicts this as a delay.
