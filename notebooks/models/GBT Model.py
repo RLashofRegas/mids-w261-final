@@ -29,17 +29,10 @@ sqlContext = SQLContext(sc)
 final_project_path = "dbfs:/mnt/mids-w261/group_5/"
 dbutils.fs.mkdirs(final_project_path)
 
-# input data paths
-weather_data_path = "dbfs:/mnt/mids-w261/datasets_final_project/weather_data/weather20*.parquet"
-airlines_data_path = "dbfs:/mnt/mids-w261/datasets_final_project/parquet_airlines_data/20*.parquet"
-city_timezone_path = final_project_path + "city_timezones.csv"
-
 # output paths
 train_data_output_path = final_project_path + "training_data_output/train.parquet"
-validation_data_output_path = final_project_path + "training_data_output/validation.parquet"
 test_data_output_path = final_project_path + "training_data_output/test.parquet"
 train_data_output_path_one_hot = final_project_path + "training_data_output/train_one_hot.parquet"
-validation_data_output_path_one_hot = final_project_path + "training_data_output/validation_one_hot.parquet"
 test_data_output_path_one_hot = final_project_path + "training_data_output/test_one_hot.parquet"
 
 # COMMAND ----------
@@ -58,7 +51,6 @@ from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
 
 # Read in parquet file
 train_GBT = spark.read.parquet(train_data_output_path)
-validation_GBT = spark.read.parquet(validation_data_output_path)
 test_GBT = spark.read.parquet(test_data_output_path)
 
 # COMMAND ----------
@@ -73,24 +65,22 @@ display(train_GBT.sample(False, 0.0001))
 # COMMAND ----------
 
 # Assemble categorical and numeric features into vector
-categorical = ["month", "day_of_week", "op_unique_carrier", "Holiday", "PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", "origin_WND_direction_angle", "origin_WND_type_code", "origin_CIG_ceiling_visibility_okay", "origin_VIS_variability", "dest_WND_direction_angle", "dest_WND_type_code", "dest_CIG_ceiling_visibility_okay", "dest_VIS_variability", "crs_dep_hour"]
+categorical = ["month", "day_of_week", "op_unique_carrier", "Holiday", "PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", "origin_WND_type_code", "origin_CIG_ceiling_visibility_okay", "origin_VIS_variability", "dest_WND_type_code", "dest_CIG_ceiling_visibility_okay", "dest_VIS_variability", "crs_dep_hour"]
 
 categorical_index = [i + "_Index" for i in categorical]
 
-numeric = ["origin_num_flights","origin_avg_dep_delay", "origin_pct_dep_del15", "origin_avg_taxi_time", "origin_avg_weather_delay", "origin_avg_nas_delay", "origin_avg_security_delay", "origin_avg_late_aircraft_delay", "dest_num_flights","dest_avg_dep_delay", "dest_pct_dep_del15", "dest_avg_taxi_time", "dest_avg_weather_delay", "dest_avg_nas_delay", "dest_avg_security_delay", "dest_avg_late_aircraft_delay", "carrier_num_flights", "carrier_avg_dep_delay", "carrier_avg_carrier_delay", "origin_WND_speed_rate", "origin_CIG_ceiling_height", "origin_VIS_distance", "origin_TMP_air_temperature", "origin_DEW_dew_point_temp", "origin_SLP_sea_level_pressure", "dest_WND_speed_rate", "dest_CIG_ceiling_height", "dest_VIS_distance", "dest_TMP_air_temperature", "dest_DEW_dew_point_temp", "dest_SLP_sea_level_pressure"]
+numeric = ["origin_num_flights","origin_avg_dep_delay", "origin_pct_dep_del15", "origin_avg_taxi_time", "origin_avg_weather_delay", "origin_avg_nas_delay", "origin_avg_security_delay", "origin_avg_late_aircraft_delay", "dest_num_flights","dest_avg_dep_delay", "dest_pct_dep_del15", "dest_avg_taxi_time", "dest_avg_weather_delay", "dest_avg_nas_delay", "dest_avg_security_delay", "dest_avg_late_aircraft_delay", "carrier_num_flights", "carrier_avg_dep_delay", "carrier_avg_carrier_delay", "origin_WND_direction_angle", "origin_WND_speed_rate", "origin_CIG_ceiling_height", "origin_VIS_distance", "origin_TMP_air_temperature", "origin_DEW_dew_point_temp", "origin_SLP_sea_level_pressure", "dest_WND_direction_angle", "dest_WND_speed_rate", "dest_CIG_ceiling_height", "dest_VIS_distance", "dest_TMP_air_temperature", "dest_DEW_dew_point_temp", "dest_SLP_sea_level_pressure"]
 
 features = categorical_index + numeric
-assembler = VectorAssembler(inputCols=features, outputCol="features").setHandleInvalid("keep")
+assembler = VectorAssembler(inputCols=features, outputCol="features").setHandleInvalid("skip")
 
 train_GBT = assembler.transform(train_GBT)
-validation_GBT = assembler.transform(validation_GBT)
 test_GBT = assembler.transform(test_GBT)
 
 # COMMAND ----------
 
 # Define GBT model
-#gbt = GBTClassifier(labelCol="label", featuresCol="features", maxIter=100)
-gbt = GBTClassifier(labelCol="label", featuresCol="features", maxIter=100, stepSize=0.1)
+gbt = GBTClassifier(labelCol="label", featuresCol="features")
 
 # COMMAND ----------
 
@@ -105,11 +95,11 @@ gbt = GBTClassifier(labelCol="label", featuresCol="features", maxIter=100, stepS
 #  - maxIter: iterations, i.e., number of trees in each GBT ensemble
 # In this example notebook, we keep these values small.  In practice, to get the highest accuracy, you would likely want to try deeper trees (10 or higher) and more trees in the ensemble (>100).
 
-#paramGrid = ParamGridBuilder().build()
+paramGrid = ParamGridBuilder().build()
 paramGrid = ParamGridBuilder()\
   .addGrid(gbt.maxDepth, [2, 5])\
+  .addGrid(gbt.maxIter, [10, 100])\
   .build()
-#  .addGrid(gbt.maxIter, [10, 100])\
 
 # COMMAND ----------
 
@@ -124,7 +114,7 @@ cv = CrossValidator(estimator=gbt, evaluator=evaluator, estimatorParamMaps=param
 
 # COMMAND ----------
 
-# Train GBT model
+# Train GBT model with cross validation
 GBT_model = cv.fit(train_GBT)
 
 # COMMAND ----------
