@@ -47,12 +47,7 @@ train_set = spark.read.parquet(train_data_output_path)
 
 # COMMAND ----------
 
-train_set.count()
-
-# COMMAND ----------
-
 train_set = train_set.where(f.col("label") != 2)
-train_set.count()
 
 # COMMAND ----------
 
@@ -64,7 +59,7 @@ train_set.printSchema()
 
 # COMMAND ----------
 
-# MAGIC %md We have selected Random Forests (RF) as the final model based on results from the above exploritory algorithm analysis. We will demonstrate a decision tree classifier using a toy example with 2 features from the flight delay training data and continue with an explaination of the RF algorithm. 
+# MAGIC %md We have selected Random Forests (RF) as the final model based on results from the above exploritory algorithm analysis. We will demonstrate a decision tree classifier using a toy example with 3 features from the flight delay training data and continue with an explaination of the RF algorithm. 
 
 # COMMAND ----------
 
@@ -73,18 +68,17 @@ train_set.printSchema()
 # COMMAND ----------
 
 # MAGIC %md ##### Example Data
-# MAGIC First we separate 20% of the training data that the toy model will use to make predictions. Then we select 2 features from the dataset to visualize the trees that RF will build and compile these into a feature vector for the model.
+# MAGIC First we separate 20% of the training data that the toy model will use to make predictions. Then we select 3 features from the dataset to visualize the trees that RF will build and compile these into a feature vector for the model.
 
 # COMMAND ----------
 
 # Divide training data into train and test set with features for example
-train_toy, test_toy = train_set.select("label", "PREVIOUS_FLIGHT_DELAYED_FOR_MODELS_Index", "origin_avg_dep_delay", "day_of_week_Index", "crs_dep_hour_Index", "carrier_avg_dep_delay", "month_Index").randomSplit([0.8, 0.2], seed = 1)
+train_toy, test_toy = train_set.select("label", "fl_date", "PREVIOUS_FLIGHT_DELAYED_FOR_MODELS_Index", "origin_avg_dep_delay", "day_of_week_Index", "crs_dep_hour_Index", "month_Index").randomSplit([0.8, 0.2], seed = 1)
 
 # COMMAND ----------
 
-# Select 2 features and compile into feature vector
-# features = ["PREVIOUS_FLIGHT_DELAYED_FOR_MODELS_Index", "origin_avg_dep_delay", "day_of_week_Index", "crs_dep_hour_Index"]
-features = ["day_of_week_Index", "month_Index"]
+# Select 3 features and compile into feature vector
+features = ["PREVIOUS_FLIGHT_DELAYED_FOR_MODELS_Index", "origin_avg_dep_delay", "crs_dep_hour_Index"]
 assembler = VectorAssembler(inputCols=features, outputCol="features").setHandleInvalid("keep")
 
 train_toy = assembler.transform(train_toy)
@@ -102,11 +96,6 @@ test_toy = spark.read.option("header", "true").parquet(test_toy_output_path)
 
 # COMMAND ----------
 
-train_toy.createOrReplaceTempView("train_toy")
-display(sqlContext.sql("SELECT label, count(*) FROM train_toy GROUP BY label"))
-
-# COMMAND ----------
-
 # MAGIC %md ##### Training Decision Trees   
 # MAGIC 
 # MAGIC Next we will train a decision tree. Each tree is constructed with a series of splitting rules. The example figure below builds one tree with 2 available features. The first node at the top of the tree is split based on whether the previous flight is delayed. From the right branch the next split is on day of the week. These splits divide the training examples into 3 regions, at the leaf nodes, based on the combination of their features. 
@@ -121,27 +110,44 @@ display(sqlContext.sql("SELECT label, count(*) FROM train_toy GROUP BY label"))
 
 # Simple decision tree model
 dt = DT(labelCol="label", featuresCol="features")
-pipeline = Pipeline(stages=[dt])
-DT_model = pipeline.fit(train_toy)
+DT_model = dt.fit(train_toy)
 
-display(DT_model.stages[0])
+display(DT_model)
 
 # COMMAND ----------
 
 # MAGIC %md ##### Make Predictions
 # MAGIC To make a prediction using the decision tree, we assign a test data point to the leaf node (region) of the tree to which it belongs based on its features. The predicted class for a test example in region \\(m\\) is \\(argmax\_k\\) \\(\hat{p}\_{mk}\\), or the majority class.  
+# MAGIC 
+# MAGIC Below is an example of a prediction on a test example.
+
+# COMMAND ----------
+
+# Add row number to compare predictions for the same test example
+window = Window.orderBy(f.col("fl_date"))
+test_toy = test_toy.withColumn("row", f.row_number().over(window))
+
+# COMMAND ----------
+
+# Predict on toy test set
+pred_toy_DT = DT_model.transform(test_toy)
+
+# COMMAND ----------
+
+# Create dataframe with predictions and show example
+labelAndPrediction = pred_toy_DT.select("label", "row", "prediction", "features")
+display(labelAndPrediction.sample(False, 0.000001))
 
 # COMMAND ----------
 
 # MAGIC %md ##### RF Algorithm
-# MAGIC The method of averaging many trees grown from repeated samples of the training data, or bagging, decreases variance of the model that would occur with any one tree. The RF training method goes a step further to help guarantee a more reliable result. RF trees are built such that each node is randomly assigned a subset of features that will be considered as possible split candidates. This means that the trees will differ from each other, which when averaged will decrease variance more than bagging alone.  
+# MAGIC The method of averaging many trees grown from repeated samples of the training data, or bagging, decreases variance of the model that would occur with any one tree. Bagging grows deep trees and does not prune. The RF training method goes a step further to help guarantee a more reliable result. RF trees are built such that each node is randomly assigned a subset of features that will be considered as possible split candidates. This means that the trees will differ from each other, which when averaged will decrease variance more than bagging alone.  
 
 # COMMAND ----------
 
 # RF model
 rf = RF(labelCol="label", featuresCol="features", numTrees=10)
-pipeline_RF = Pipeline(stages=[rf])
-RF_model = pipeline_RF.fit(train_toy)
+RF_model = rf.fit(train_toy)
 
 # COMMAND ----------
 
