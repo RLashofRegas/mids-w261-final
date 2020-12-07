@@ -432,9 +432,6 @@ weather = slp_parse(weather)
 weather = present_weather_parse(weather)
 weather = snow_dimension_parse(weather)
 weather = rain_dimension_parse(weather)
-weather = weather.cache()
-
-weather.createOrReplaceTempView("weather")
 
 # COMMAND ----------
 
@@ -447,6 +444,8 @@ weather.write.format("parquet").mode("overwrite").save(weather_processed)
 #Read files back in from parquet and store in same variables
 airlines = spark.read.option("header", "true").parquet(airlines_processed) # processed airline dataset
 weather = spark.read.option("header", "true").parquet(weather_processed) # processed weather dataset
+airlines.createOrReplaceTempView("airlines")
+weather.createOrReplaceTempView("weather")
 
 # COMMAND ----------
 
@@ -673,6 +672,7 @@ airlines.write.format("parquet").mode("overwrite").save(airlines_processed_engin
 
 #Read files back in from parquet and store in same variables
 airlines = spark.read.option("header", "true").parquet(airlines_processed_engineered) # processed airline dataset
+airlines.createOrReplaceTempView("airlines")
 
 # COMMAND ----------
 
@@ -686,25 +686,25 @@ airlines = spark.read.option("header", "true").parquet(airlines_processed_engine
 weather_airline_joined = sqlContext.sql("""
 SELECT
   f.*,
-  dao.num_flights AS origin_num_flights,
-  dao.avg_dep_delay AS origin_avg_dep_delay,
-  dao.pct_dep_del15 AS origin_pct_dep_del15,
-  dao.avg_taxi_time AS origin_avg_taxi_time,
-  dao.avg_weather_delay AS origin_avg_weather_delay,
-  dao.avg_nas_delay AS origin_avg_nas_delay,
-  dao.avg_security_delay AS origin_avg_security_delay,
-  dao.avg_late_aircraft_delay AS origin_avg_late_aircraft_delay,
-  dad.num_flights AS dest_num_flights,
-  dad.avg_dep_delay AS dest_avg_dep_delay,
-  dad.pct_dep_del15 AS dest_pct_dep_del15,
-  dad.avg_taxi_time AS dest_avg_taxi_time,
-  dad.avg_weather_delay AS dest_avg_weather_delay,
-  dad.avg_nas_delay AS dest_avg_nas_delay,
-  dad.avg_security_delay AS dest_avg_security_delay,
-  dad.avg_late_aircraft_delay AS dest_avg_late_aircraft_delay,
-  dco.num_flights AS carrier_num_flights,
-  dco.avg_dep_delay AS carrier_avg_dep_delay,
-  dco.avg_carrier_delay AS carrier_avg_carrier_delay,
+  IFNULL(dao.num_flights, 0) AS origin_num_flights,
+  IFNULL(dao.avg_dep_delay, 0) AS origin_avg_dep_delay,
+  IFNULL(dao.pct_dep_del15, 0) AS origin_pct_dep_del15,
+  IFNULL(dao.avg_taxi_time, 0) AS origin_avg_taxi_time,
+  IFNULL(dao.avg_weather_delay, 0) AS origin_avg_weather_delay,
+  IFNULL(dao.avg_nas_delay, 0) AS origin_avg_nas_delay,
+  IFNULL(dao.avg_security_delay, 0) AS origin_avg_security_delay,
+  IFNULL(dao.avg_late_aircraft_delay, 0) AS origin_avg_late_aircraft_delay,
+  IFNULL(dad.num_flights, 0) AS dest_num_flights,
+  IFNULL(dad.avg_dep_delay, 0) AS dest_avg_dep_delay,
+  IFNULL(dad.pct_dep_del15, 0) AS dest_pct_dep_del15,
+  IFNULL(dad.avg_taxi_time, 0) AS dest_avg_taxi_time,
+  IFNULL(dad.avg_weather_delay, 0) AS dest_avg_weather_delay,
+  IFNULL(dad.avg_nas_delay, 0) AS dest_avg_nas_delay,
+  IFNULL(dad.avg_security_delay, 0) AS dest_avg_security_delay,
+  IFNULL(dad.avg_late_aircraft_delay, 0) AS dest_avg_late_aircraft_delay,
+  IFNULL(dco.num_flights, 0) AS carrier_num_flights,
+  IFNULL(dco.avg_dep_delay, 0) AS carrier_avg_dep_delay,
+  IFNULL(dco.avg_carrier_delay, 0) AS carrier_avg_carrier_delay,
   wo.WND_direction_angle AS origin_WND_direction_angle,  
   wo.WND_direction_quality AS origin_WND_direction_quality,
   wo.WND_type_code AS origin_WND_type_code,
