@@ -98,7 +98,7 @@ test_toy = spark.read.option("header", "true").parquet(test_toy_output_path)
 
 # MAGIC %md ##### Training Decision Trees   
 # MAGIC 
-# MAGIC Next we will train a decision tree. Each tree is constructed with a series of splitting rules. The example figure below builds one tree with 2 available features. The first node at the top of the tree is split based on whether the previous flight is delayed. From the right branch the next split is on day of the week. These splits divide the training examples into 3 regions, at the leaf nodes, based on the combination of their features. 
+# MAGIC Next we will train a decision tree. Each tree is constructed with a series of splitting rules. The example figure below builds one tree with 3 available features. The first node at the top of the tree is split based on whether the previous flight is delayed. From the right branch the next split is on scheduled departure hour of day. The tree increases depth by choosing the best split considering all features and split points. These splits divide the training examples into 7 regions, at the leaf nodes, based on the combination of their features. 
 # MAGIC 
 # MAGIC How does the model decide splits? Our classification tree splits at the point which minimizes the *gini index*, a measure of node purity. The equation for the gini index is shown below, where \\(\hat{p}\_{mk}\\) is the proportion of examples in region \\(m\\) of class \\(k\\). 
 # MAGIC 
@@ -119,24 +119,21 @@ display(DT_model)
 # MAGIC %md ##### Make Predictions
 # MAGIC To make a prediction using the decision tree, we assign a test data point to the leaf node (region) of the tree to which it belongs based on its features. The predicted class for a test example in region \\(m\\) is \\(argmax\_k\\) \\(\hat{p}\_{mk}\\), or the majority class.  
 # MAGIC 
-# MAGIC Below is an example of a prediction on a test example.
+# MAGIC Below is an example of a prediction on a test example. For this example, the previous flight for the aircraft was delayed (feature 0 = 1) which moves down the left branch from the top of the tree. This flight's departure time is in hour 15, which moves it down the right branch of the next node. Next, the average delay at the origin airport 3 hours before is 12.9 minutes, which is less than the split point at 14.6 minutes. Lastly, repeating the hour of day feature for a split increases node purity and this flight is predicted to have no delay.
 
 # COMMAND ----------
 
 # Add row number to compare predictions for the same test example
-window = Window.orderBy(f.col("fl_date"))
-test_toy = test_toy.withColumn("row", f.row_number().over(window))
+test_toy = test_toy.withColumn("row", f.monotonically_increasing_id())
 
 # COMMAND ----------
 
 # Predict on toy test set
 pred_toy_DT = DT_model.transform(test_toy)
 
-# COMMAND ----------
-
 # Create dataframe with predictions and show example
 labelAndPrediction = pred_toy_DT.select("label", "row", "prediction", "features")
-display(labelAndPrediction.sample(False, 0.000001))
+display(labelAndPrediction.where(labelAndPrediction.row == 575525629176))
 
 # COMMAND ----------
 
