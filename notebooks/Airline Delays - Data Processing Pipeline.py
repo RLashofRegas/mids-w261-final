@@ -487,23 +487,39 @@ DROP VIEW IF EXISTS delays_by_airport
 sqlContext.sql("""
 CREATE TEMPORARY VIEW delays_by_airport
 AS
+WITH delays_by_airport_temp
+AS
+(
+  SELECT
+    a.origin,
+    a.truncated_crs_dep_time_utc AS hour,
+    IFNULL(COUNT(*), 0) AS num_flights,
+    IFNULL(AVG(dep_delay), 0) AS avg_dep_delay,
+    IFNULL(AVG(dep_del15), 0) AS pct_dep_del15,
+    IFNULL(AVG(taxi_out), 0) AS avg_taxi_time,
+    IFNULL(AVG(weather_delay), 0) AS avg_weather_delay,
+    IFNULL(AVG(nas_delay), 0) AS avg_nas_delay,
+    IFNULL(AVG(security_delay), 0) AS avg_security_delay,
+    IFNULL(AVG(late_aircraft_delay), 0) AS avg_late_aircraft_delay
+  FROM airlines AS a
+  GROUP BY
+    a.origin,
+    a.truncated_crs_dep_time_utc
+)
 SELECT
   a.origin,
-  a.truncated_crs_dep_time_utc AS hour,
-  IFNULL(COUNT(*), 0) / at.num_flights AS num_flights,
-  IFNULL(AVG(dep_delay), 0) / IF(at.avg_dep_delay == 0, 0.1, at.avg_dep_delay) AS avg_dep_delay,
-  IFNULL(AVG(dep_del15), 0) / IF(at.pct_dep_del15 == 0, 0.1, at.pct_dep_del15) AS pct_dep_del15,
-  IFNULL(AVG(taxi_out), 0) / IF(at.avg_taxi_time == 0, 0.1, at.avg_taxi_time) AS avg_taxi_time,
-  IFNULL(AVG(weather_delay), 0) / IF(at.avg_weather_delay == 0, 0.1, at.avg_weather_delay) AS avg_weather_delay,
-  IFNULL(AVG(nas_delay), 0) / IF(at.avg_nas_delay == 0, 0.1, at.avg_nas_delay) AS avg_nas_delay,
-  IFNULL(AVG(security_delay), 0) / IF(at.avg_security_delay == 0, 0.1, at.avg_security_delay) AS avg_security_delay,
-  IFNULL(AVG(late_aircraft_delay), 0) / IF(at.avg_late_aircraft_delay == 0, 0.1, at.avg_late_aircraft_delay) AS avg_late_aircraft_delay
-FROM airlines AS a
+  a.hour,
+  a.num_flights / at.num_flights AS num_flights,
+  a.avg_dep_delay / IF(at.avg_dep_delay == 0, 0.1, at.avg_dep_delay) AS avg_dep_delay,
+  a.pct_dep_del15 / IF(at.pct_dep_del15 == 0, 0.1, at.pct_dep_del15) AS pct_dep_del15,
+  a.avg_taxi_time / IF(at.avg_taxi_time == 0, 0.1, at.avg_taxi_time) AS avg_taxi_time,
+  a.avg_weather_delay / IF(at.avg_weather_delay == 0, 0.1, at.avg_weather_delay) AS avg_weather_delay,
+  a.avg_nas_delay / IF(at.avg_nas_delay == 0, 0.1, at.avg_nas_delay) AS avg_nas_delay,
+  a.avg_security_delay / IF(at.avg_security_delay == 0, 0.1, at.avg_security_delay) AS avg_security_delay,
+  a.avg_late_aircraft_delay / IF(at.avg_late_aircraft_delay == 0, 0.1, at.avg_late_aircraft_delay) AS avg_late_aircraft_delay
+FROM delays_by_airport_temp AS a
 INNER JOIN delays_by_airport_total AS at ON
   a.origin = at.origin
-GROUP BY
-  a.origin,
-  a.truncated_crs_dep_time_utc
 """)
 
 # COMMAND ----------
