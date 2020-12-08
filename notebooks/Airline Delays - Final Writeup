@@ -42,6 +42,9 @@ from pandas.tseries.holiday import USFederalHolidayCalendar
 from datetime import datetime, timedelta
 from pyspark.ml.feature import IndexToString, StringIndexer, OneHotEncoder, VectorAssembler, Bucketizer, StandardScaler
 import pandas as pd
+from pyspark.ml.linalg import Vectors
+from pyspark.ml.stat import Correlation
+import matplotlib.pyplot as plt
 
 # COMMAND ----------
 
@@ -225,6 +228,57 @@ ORDER BY origin_aa1_rain_depth"""))
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC #### Weather Correlation Matrix
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Before we utilize the weather features in our models we wanted to understand if certain variables are highly correlated.  As shown the correlation matrix below the air temperature and dew point temperature have a high correlation above .5.  As a result, we will only include one of these features in the models we build to prevent greater variance in our model parameter estimates as well as makes it easier for our decision trees to learn the features because it has to consider less features in training.  
+
+# COMMAND ----------
+
+#Set Path for one hot encoded files
+final_project_path = "dbfs:/mnt/mids-w261/group_5/"
+dbutils.fs.mkdirs(final_project_path)
+train_data_output_path_one_hot = final_project_path + "training_data_output/train_one_hot.parquet"
+
+# Read in parquet file
+train_log = spark.read.parquet(train_data_output_path_one_hot)
+
+#Create dataframe with only weather variables that are integers and drop rows with missing data 
+weather_df = train_log.select('origin_WND_speed_rate',"origin_TMP_air_temperature",'origin_CIG_ceiling_height',"origin_DEW_dew_point_temp",'origin_VIS_distance','origin_SLP_sea_level_pressure','origin_aj1_snow_depth','origin_aa1_rain_depth')
+weather_df = weather_df.dropna()
+
+# COMMAND ----------
+
+#Create weather feature vector 
+assembler_weather = VectorAssembler(inputCols=weather_df.columns,outputCol="features").setHandleInvalid("keep")
+
+df_weather_new = assembler_weather.transform(weather_df)
+
+#Run pearson correlation matrix 
+r1 = Correlation.corr(df_weather_new, "features").collect()[0][0]
+
+# COMMAND ----------
+
+corrmatrix = r1.toArray().tolist()
+df = spark.createDataFrame(corrmatrix,weather_df.columns)
+
+def plot_corr_matrix(correlations,attr):
+    fig=plt.figure(figsize=(10,10))
+    ax=fig.add_subplot(111)
+    ax.set_title("Correlation Matrix for Weather Attributes", fontsize=20, pad=140)
+    ax.set_xticklabels(['']+attr, rotation=90)
+    ax.set_yticklabels(['']+attr)
+    cax=ax.matshow(correlations,cmap='coolwarm',vmax=1,vmin=-1)
+    fig.colorbar(cax,fraction=0.046, pad=0.04)
+    plt.show()
+
+plot_corr_matrix(corrmatrix, weather_df.columns)
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC With a basic understanding of the features we have to use for our model we will next discuss the various feature engineering techniques we employed to get even more signal out of the provided data.
 
 # COMMAND ----------
@@ -235,7 +289,62 @@ ORDER BY origin_aa1_rain_depth"""))
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ####Airline Flight Feature Engineering
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ####Weather Feature Engineering
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC To identify weather patterns the could cause delays, we filtered our training data to look at flights that had a weather delay and did not have a weather delay to understand what types of weather thresholds could be used to create indicator variables.  After reviewing the summary statistics for the weather variables, we decided to create four weather indicator variables to increase the signal we might see from the weather features in our models.  The first feature we created was focused on identifying flights that had very low ceiling height below 2,000.  Per the summary statisitic tables below, the average origin ceiling height for weather delays is 4,000 below the ceiling height for non weather delay flights. Moreover, we also noticed the origin wind speed rate is higher for weather delayed flights so we created an indicator that highlights if wind is above 50.  The last two features we created focused on winter and summer temperature trends.  Per the origin air temperature histograms below, the weather delayed flights had a higher percentage of summer flights with below air temperature values below 0, so we created a indicator variable to identify these types of weather patterns during the summer. 
+
+# COMMAND ----------
+
+#Seperate Weather Delays 
+delay_udf = udf(lambda x: 0 if x == None or x <= 15 else 1)
+train_log = train_log.withColumn('weather_15_delay_indicator', delay_udf(train_log.weather_delay))
+
+# COMMAND ----------
+
+#Review summary stats for weather delays 
+display(train_log.filter(col('weather_15_delay_indicator')==1).select('origin_WND_speed_rate',"origin_TMP_air_temperature",'origin_CIG_ceiling_height',"origin_DEW_dew_point_temp",'origin_VIS_distance','origin_SLP_sea_level_pressure','origin_aj1_snow_depth','origin_aa1_rain_depth').summary())
+
+#Review summary stats for other non-weather delayed flights 
+display(train_log.filter(col('weather_15_delay_indicator')==0).select('origin_WND_speed_rate',"origin_TMP_air_temperature",'origin_CIG_ceiling_height',"origin_DEW_dew_point_temp",'origin_VIS_distance','origin_SLP_sea_level_pressure','origin_aj1_snow_depth','origin_aa1_rain_depth').summary())
+
+# COMMAND ----------
+
+summer_months=[5,6,7,8,9,10]
+winter_months=[1,2,3,4,11,12]
+
+#Review histogram of air temperatures associated with weather delays (1) and flights with no weather delay (0) during the summer
+train_log.filter(~col('month').isin(summer_months)).select('origin_TMP_air_temperature',"weather_15_delay_indicator").display()
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Algorithm Exploration
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Base Model - Logistic Regression
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Our base model is a logistic regression classification model with a subset of the airline and weather features. We included features to capture seasonality, recent weather patterns at the origin airport, time of day, as well as two engineered features that captured whether a previous flight was delayed and whether the day of the flight was a holiday. During our EDA we identified that dew point and air temp were strongly correlated so we only included air temperature to capture the most recent temperature. When we ran our initial logistic regression model, we observed that the model always predicted that there was no delay due to the imbalance in the dataset with under 20% of flights being delayed. To account for the imbalance of the outcome variable we explored two options for the base model including a weight column that utilizes a balancing ratio and adjusting the threshold for the model to a value closer to the mix of delays to no delays. The threshold was slightly more effective at improving recall for our model than the weighted column so we utilitized the threshold in our base model which is shown below. As we increased the threshold from .18 to .5 we noticed a large drop in recall with an increase in accuracy, we found that a threshold below .2 had good balance of accuracy and recall. The most noticeable improvement in the model accuracy and recall came when we added the previous flight delay feature, which signaled to us that this feature maybe very important to include in future models. Our base model had an accuracy and recall of **XX and XX (Pending Model Updates**). In our next models we explore using a broader set of the features available as well as additional methods for handling the imbalance of the outcome variable in the dataset.
+
+# COMMAND ----------
+
+# MAGIC %md Insert Base Model Performance
 
 # COMMAND ----------
 
