@@ -111,7 +111,7 @@ plt.show()
 # MAGIC 
 # MAGIC We also notice that there are a little over 1% nulls. A little more analysis (ommitted here for brevity) shows that of these 477,296 flights:
 # MAGIC 
-# MAGIC - 472,552 flights were cancelled - we choose to ignore these in our training set because an analysis of flight cancellatino prediction and causal inference is outside the scope of this project. This is another high-value business problem and a prime target for future work using the `cancellation_code` variable in this dataset. We will also omit cancelled flights from evaluation on our test set since making predictions on these flights is a seperate domain of outcomes.
+# MAGIC - 472,552 flights were cancelled - we choose to ignore these in our training set because an analysis of flight cancellation prediction and causal inference is outside the scope of this project. This is another high-value business problem and a prime target for future work using the `cancellation_code` variable in this dataset. We will also omit cancelled flights from evaluation on our test set since making predictions on these flights is a seperate domain of outcomes.
 # MAGIC - 4,739 flights had `crs_dep_time` (scheduled departure time) equal to `dep_time` (actual departure time). We assume these records are mislabeled since the rest of the fields for these flights appear normal. For this reason, we manually set the `dep_del15` column to 0 for these flights.
 # MAGIC - The final 5 flights are marked as `diverted` and have additional records for the new flight number assigned to those airplanes from the same departure airport. For this reason we choose to ignore them in our training set, and as above mark them as incorrect predictions regardless of our predicted class.
 
