@@ -194,7 +194,8 @@ SELECT
   TO_UTC_TIMESTAMP(DATE_TRUNC('hour', TO_TIMESTAMP(CONCAT(fl_date, ' ', LPAD(crs_dep_time, 4, '0')), 'yyyy-MM-dd HHmm')), to.timezone) AS truncated_crs_dep_time_utc,
   TO_UTC_TIMESTAMP(DATE_TRUNC('hour', TO_TIMESTAMP(CONCAT(fl_date, ' ', LPAD(crs_dep_time, 4, '0')), 'yyyy-MM-dd HHmm')), to.timezone) - INTERVAL 3 HOURS AS truncated_crs_dep_minus_three_utc,
   TO_UTC_TIMESTAMP(TO_TIMESTAMP(CONCAT(fl_date, ' ', LPAD(crs_dep_time, 4, '0')), 'yyyy-MM-dd HHmm'), to.timezone) AS crs_dep_time_utc,
-  TO_UTC_TIMESTAMP(TO_TIMESTAMP(CONCAT(fl_date, ' ', LPAD(crs_dep_time, 4, '0')), 'yyyy-MM-dd HHmm'), to.timezone) - INTERVAL 2 HOURS 15 MINUTES AS crs_dep_minus_two_fifteen_utc
+  TO_UTC_TIMESTAMP(TO_TIMESTAMP(CONCAT(fl_date, ' ', LPAD(crs_dep_time, 4, '0')), 'yyyy-MM-dd HHmm'), to.timezone) - INTERVAL 2 HOURS 15 MINUTES AS crs_dep_minus_two_fifteen_utc,
+  TO_UTC_TIMESTAMP(TO_TIMESTAMP(CONCAT(fl_date, ' ', LPAD(crs_arr_time, 4, '0')), 'yyyy-MM-dd HHmm'), to.timezone) AS crs_arr_time_utc
 FROM airlines_temp AS f
 LEFT JOIN city_state_timezone AS td ON
   f.short_dest_city_name = td.city_state
@@ -590,7 +591,7 @@ def chain_delay_feature_engineering(airline_df):
   airline_df.createOrReplaceTempView("airlines_temp_view")
 
   #Store new df with limited number of ordered columns that we can use to window 
-  airlines_aircraft_tracking = airline_df[["tail_num","fl_date","origin_city_name", "dest_city_name", "dep_del15", "crs_dep_time_utc", "crs_dep_minus_two_fifteen_utc"]].orderBy("tail_num","fl_date", "crs_dep_time_utc")
+  airlines_aircraft_tracking = airline_df[["tail_num","fl_date","origin_city_name", "dest_city_name", "dep_del15", "crs_dep_time_utc", "crs_dep_minus_two_fifteen_utc", "crs_arr_time_utc"]].orderBy("tail_num","fl_date", "crs_dep_time_utc")
   #This section is related to windowing so that we can pull information from previous flight and flight 2 before current flight. Windowing will only pull for the same tail number
   w = Window.partitionBy("tail_num").orderBy("crs_dep_time_utc")
   diff = col("crs_dep_time_utc").cast("long") - lag("crs_dep_time_utc", 1).over(w).cast("long")
@@ -616,14 +617,14 @@ def chain_delay_feature_engineering(airline_df):
         if arr_time_one_before <= 18000:
           return delay_one_before
         else:
-          return float(0.0)
+          return int(0)
       else:  
         if arr_time_two_before <= 25200:
           return delay_two_before
         else:
-          return float(0.0)
+          return int(0)
     except:
-      return None
+      return int(0)
 
   chain_delay_analysis_udf = f.udf(chain_delay_analysis)
   airlines_aircraft_tracking_diff_for_join = airlines_aircraft_tracking_diff.withColumn("PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", chain_delay_analysis_udf('crs_dep_time_utc', 'dep_time_diff_one_flight_before', 'dep_time_diff_two_flights_before', 'delay_one_before', 'delay_two_before', 'arr_time_one_before', 'arr_time_two_before'))
@@ -873,6 +874,13 @@ test_set.write.format("parquet").mode("overwrite").save(test_data_output_path)
 
 # COMMAND ----------
 
+#Read back saved files
+train_set = spark.read.option("header", "true").parquet(train_data_output_path)
+test_set = spark.read.option("header", "true").parquet(test_data_output_path)
+
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ### One Hot Encode Features And Save Copy
 # MAGIC Some models like decision trees do better with/can handle the raw features without one-hot encoding applied. Thus we save two copies of our training data (one before one-hot encoding and one after). When performing the one-hot encoding we make sure to only use the train dataset to fit our encoder so that we are not "cheating" and bringing in data from the test or validation set.
@@ -892,3 +900,6 @@ test_one_hot = encoder.transform(test_set)
 
 train_one_hot.write.format("parquet").mode("overwrite").save(train_data_output_path_one_hot)
 test_one_hot.write.format("parquet").mode("overwrite").save(test_data_output_path_one_hot)
+
+# COMMAND ----------
+
