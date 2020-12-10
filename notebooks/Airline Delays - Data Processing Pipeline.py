@@ -590,7 +590,7 @@ def chain_delay_feature_engineering(airline_df):
   airline_df.createOrReplaceTempView("airlines_temp_view")
 
   #Store new df with limited number of ordered columns that we can use to window 
-  airlines_aircraft_tracking = airlines_non_cancelled[["tail_num","fl_date","origin_city_name", "dest_city_name", "dep_del15", "crs_dep_time_utc", "crs_dep_minus_two_fifteen_utc", "crs_arr_time_utc"]].orderBy("tail_num","fl_date", "crs_dep_time_utc")
+  airlines_aircraft_tracking = airline_df[["tail_num","fl_date","origin_city_name", "dest_city_name", "dep_del15", "crs_dep_time_utc", "crs_dep_minus_two_fifteen_utc"]].orderBy("tail_num","fl_date", "crs_dep_time_utc")
   #This section is related to windowing so that we can pull information from previous flight and flight 2 before current flight. Windowing will only pull for the same tail number
   w = Window.partitionBy("tail_num").orderBy("crs_dep_time_utc")
   diff = col("crs_dep_time_utc").cast("long") - lag("crs_dep_time_utc", 1).over(w).cast("long")
