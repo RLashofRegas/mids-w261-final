@@ -66,7 +66,7 @@ test_GBT = assembler.transform(test_GBT)
 # COMMAND ----------
 
 # Define GBT model
-gbt = GBTClassifier(labelCol="label", featuresCol="features", maxIter = 100, maxDepth=20)
+gbt = GBTClassifier(labelCol="label", featuresCol="features", maxIter = 100, maxDepth=10)
 
 # Train GBT model with cross validation
 GBT_model = gbt.fit(train_GBT)
@@ -169,56 +169,3 @@ make_predictions(cv_model, test_set)
 # get feature importances
 for i in range(len(features)):
     print("{}: {}".format(features[i],round(cv_model.featureImportances[i],3)))
-
-# COMMAND ----------
-
-# Train GBT model with cross validation
-GBT_model = gbt.fit(train_GBT)
-
-# COMMAND ----------
-
-# Make predictions
-predictions = GBT_model.transform(val_GBT)
-
-# COMMAND ----------
-
-# display sample of labels and predictions
-labelAndPrediction = predictions.select("label", "prediction", "features")
-display(labelAndPrediction.sample(False, 0.0001))
-
-# COMMAND ----------
-
-# evaluate model
-TP = labelAndPrediction.where((labelAndPrediction.label == 1) & (labelAndPrediction.prediction == 1)).count()
-FP = labelAndPrediction.where((labelAndPrediction.label == 0) & (labelAndPrediction.prediction == 1)).count()
-TN = labelAndPrediction.where((labelAndPrediction.label == 0) & (labelAndPrediction.prediction == 0)).count()
-FN = labelAndPrediction.where((labelAndPrediction.label == 1) & (labelAndPrediction.prediction == 0)).count()
-accuracy = (TP + TN)/labelAndPrediction.count()
-
-if TP + FN == 0:
-    recall = 0
-    precision = float(TP) / (TP + FP)
-
-elif TP + FP == 0:
-    recall = float(TP) / (TP + FN)
-    precision = 0
-
-else:
-    recall = float(TP) / (TP + FN)
-    precision = float(TP) / (TP + FP)
-
-if precision + recall == 0:
-    f1_score = 0
-
-else:
-  f1_score = 2 * ((precision * recall)/(precision + recall))  
-
-print('Accuracy: {:.3f}'.format(accuracy))
-print('Recall: {:.3f}'.format(recall))
-print('Precision: {:.3f}'.format(precision))
-print('F1-score: {:.3f}'.format(f1_score))
-
-# COMMAND ----------
-
-for i in range(len(features)):
-    print("{}: {}".format(features[i],round(GBT_model.featureImportances[i],3)))
