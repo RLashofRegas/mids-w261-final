@@ -21,7 +21,7 @@ import pyspark.sql.functions as f
 from pyspark.sql.window import Window
 from pandas.tseries.holiday import USFederalHolidayCalendar
 from datetime import datetime, timedelta
-from pyspark.ml.feature import IndexToString, StringIndexer, OneHotEncoder, VectorAssembler, Bucketizer, StandardScaler
+from pyspark.ml.feature import IndexToString, StringIndexer, OneHotEncoder, VectorAssembler, Bucketizer, StandardScaler, Imputer
 import pandas as pd
 
 # COMMAND ----------
@@ -767,6 +767,21 @@ LEFT JOIN delays_by_carrier AS dco ON
   AND f.truncated_crs_dep_minus_three_utc = dco.hour
   AND f.op_unique_carrier = dco.op_unique_carrier
 """)
+
+# COMMAND ----------
+
+#Impute nulls as column mean for continuous variables
+def imputer_mean(df): 
+
+  weather_numeric_with_nulls = ['origin_WND_speed_rate','origin_CIG_ceiling_height','origin_VIS_distance','origin_TMP_air_temperature','origin_DEW_dew_point_temp','dest_WND_speed_rate','dest_CIG_ceiling_height','dest_VIS_distance','dest_TMP_air_temperature','dest_DEW_dew_point_temp','origin_aa1_rain_depth','dest_aa1_rain_depth','origin_aj1_snow_depth','dest_aj1_snow_depth']
+
+  imputer = Imputer(inputCols=weather_numeric_with_nulls, outputCols=weather_numeric_with_nulls)
+  model = imputer.fit(df)
+  df = model.transform(df)
+
+  return df 
+
+weather_airline_joined = imputer_mean(weather_airline_joined)
 
 # COMMAND ----------
 
