@@ -112,7 +112,7 @@ def make_predictions(model, testSet):
 # COMMAND ----------
 
 # make predictions on validation set
-make_predictions(GBT_model, val_set)
+make_predictions(GBT_model, val_GBT)
 
 # COMMAND ----------
 
@@ -123,7 +123,7 @@ for i in range(len(features)):
 # COMMAND ----------
 
 # make predictions on test set
-make_predictions(GBT_model, test_set)
+make_predictions(GBT_model, test_GBT)
 
 # COMMAND ----------
 
@@ -131,7 +131,7 @@ make_predictions(GBT_model, test_set)
 
 # COMMAND ----------
 
-train_cv = train_set.union(val_set)
+train_cv = train_GBT.union(val_GBT)
 
 # COMMAND ----------
 
@@ -162,7 +162,7 @@ best_GBT.extractParamMap()
 # COMMAND ----------
 
 # make predictions on test set
-make_predictions(cv_model, test_set)
+make_predictions(cv_model, test_GBT)
 
 # COMMAND ----------
 
