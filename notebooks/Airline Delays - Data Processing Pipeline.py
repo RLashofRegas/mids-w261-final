@@ -588,55 +588,57 @@ def chain_delay_feature_engineering(airline_df):
   PREVIOUS_FLIGHT_DELAYED_FOR_MODEL: If previous flight is at least 2 hours 15 minutes prior (8100 seconds), was it delayed? If less than 2:15, was flight 2 before delayed? (binary)'''
      
   airline_df.createOrReplaceTempView("airlines_temp_view")
-  
+
   #Store new df with limited number of ordered columns that we can use to window 
-  airlines_aircraft_tracking = airline_df[["tail_num","fl_date","origin_city_name", "dest_city_name", "dep_del15", "crs_dep_time_utc", "crs_dep_minus_two_fifteen_utc"]].orderBy("tail_num","fl_date", "crs_dep_time_utc")
-  
+  airlines_aircraft_tracking = airlines_non_cancelled[["tail_num","fl_date","origin_city_name", "dest_city_name", "dep_del15", "crs_dep_time_utc", "crs_dep_minus_two_fifteen_utc", "crs_arr_time_utc"]].orderBy("tail_num","fl_date", "crs_dep_time_utc")
   #This section is related to windowing so that we can pull information from previous flight and flight 2 before current flight. Windowing will only pull for the same tail number
   w = Window.partitionBy("tail_num").orderBy("crs_dep_time_utc")
-
   diff = col("crs_dep_time_utc").cast("long") - lag("crs_dep_time_utc", 1).over(w).cast("long")
   diff2 = col("crs_dep_time_utc").cast("long") - lag("crs_dep_time_utc", 2).over(w).cast("long")
   delay_one_before = lag("dep_del15", 1).over(w)
   delay_two_before = lag("dep_del15", 2).over(w)
-
+  arr_time_one_before = col("crs_dep_time_utc").cast("long") - lag("crs_arr_time_utc", 1).over(w).cast("long")
+  arr_time_two_before = col("crs_dep_time_utc").cast("long") - lag("crs_arr_time_utc", 2).over(w).cast("long")
   airlines_aircraft_tracking_diff = airlines_aircraft_tracking.withColumn("dep_time_diff_one_flight_before", diff)\
                                   .withColumn("dep_time_diff_two_flights_before", diff2)\
                                   .withColumn("delay_one_before", delay_one_before)\
-                                  .withColumn("delay_two_before", delay_two_before)
-
-  def chain_delay_analysis (dep_time_diff_one_flight_before, dep_time_diff_two_flights_before,
-                           delay_one_before, delay_two_before):
+                                  .withColumn("delay_two_before", delay_two_before)\
+                                  .withColumn("arr_time_one_before", arr_time_one_before)\
+                                  .withColumn("arr_time_two_before", arr_time_two_before)
+  def chain_delay_analysis (crs_dep_time_utc, dep_time_diff_one_flight_before, dep_time_diff_two_flights_before,
+                           delay_one_before, delay_two_before, arr_time_one_before, arr_time_two_before):
     '''Takes info on flight before: departure time difference, whether
     flight was delayed and returns 1 if flight before was delayed AND outside of 2:15 from current flight.
-    If outside of 2:15 looks at flight 2 before and returns 1 if that one was delayed, 0 if not.'''
+    If outside of 2:15 looks at flight 2 before and returns 1 if that one was delayed, 0 if not. If scheduled arrival of previous flight
+    is greater than 5 hours or flight 2 before great than 7 hours before current flight we mark as 0'''
     try:
-      if dep_time_diff_one_flight_before >= 8100:
-        return int(delay_one_before)
-      else:
-        return int(delay_two_before)
+      if dep_time_diff_one_flight_before >= 8100:      
+        if arr_time_one_before <= 18000:
+          return delay_one_before
+        else:
+          return float(0.0)
+      else:  
+        if arr_time_two_before <= 25200:
+          return delay_two_before
+        else:
+          return float(0.0)
     except:
-      return 'null'
-  #NEED TO RETURN TO THIS AND DECIDE WHAT TO DO IF FLIGHT 2 PREVIOUS WAS WITHIN 2:15. I BELIEVE MOST (ALL?) OF THOSE ARE DATA CLEANSING ISSUES
-  #ALSO SHOULD LOOK AT THE CASES WHERE THE PREVIOUS FLIGHT WAS SO MUCH EARLIER THAT ITS DELAY DOES NOT REALLY AFFECT CURRENT FLIGHT. HOW MUCH EARLIER
-  #SHOULD THAT BE?
+      return None
 
   chain_delay_analysis_udf = f.udf(chain_delay_analysis)
-
-  airlines_aircraft_tracking_diff_for_join = airlines_aircraft_tracking_diff.withColumn("PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", chain_delay_analysis_udf('dep_time_diff_one_flight_before', 'dep_time_diff_two_flights_before',
-                           'delay_one_before', 'delay_two_before'))
-  
+  airlines_aircraft_tracking_diff_for_join = airlines_aircraft_tracking_diff.withColumn("PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", chain_delay_analysis_udf('crs_dep_time_utc', 'dep_time_diff_one_flight_before', 'dep_time_diff_two_flights_before', 'delay_one_before', 'delay_two_before', 'arr_time_one_before', 'arr_time_two_before'))
   airline_df_with_id = airline_df.withColumn("id", monotonically_increasing_id())
   
+  #Join chain delay analysis back to full airline data 
   join_columns = ["tail_num","fl_date","origin_city_name", "dest_city_name", "crs_dep_time_utc"]
-  
   airlines_chain_delays = airline_df_with_id.alias("a").join(airlines_aircraft_tracking_diff_for_join.alias("j"), join_columns, 'left_outer') \
                             .select('a.year', 'a.quarter', 'a.month', 'a.day_of_week', 'a.fl_date', 'a.op_unique_carrier', 'a.tail_num', 'a.origin_airport_id', 'a.origin', 'a.origin_city_name', 'a.dest_airport_id', 'a.dest', 'a.dest_city_name', 'a.crs_dep_time', 'a.dep_time', 'a.dep_delay', 'a.dep_del15', 'a.cancelled', 'a.diverted', 'a.distance', 'a.distance_group', 'a.short_dest_city_name', 'a.short_orig_city_name', 'a.carrier_delay', 'a.weather_delay', 'a.nas_delay', 'a.security_delay', 'a.late_aircraft_delay', 'a.taxi_out', 'a.dest_timezone', 'a.origin_timezone', 'a.truncated_crs_dep_time_utc', 'a.truncated_crs_dep_minus_three_utc', 'a.crs_dep_time_utc', 'a.crs_dep_minus_two_fifteen_utc', 'a.Holiday', 'a.id', 'j.dep_time_diff_one_flight_before', 'j.dep_time_diff_two_flights_before', 'j.delay_one_before', 'j.delay_two_before', 'j.PREVIOUS_FLIGHT_DELAYED_FOR_MODELS')
-  
-  #Drop duplicates created during join. 
+                               
+  #Drop duplicates created during join.
   airlines_chain_delays_no_dups = airlines_chain_delays.dropDuplicates(['id'])
   
   return airlines_chain_delays_no_dups
+
 
 # add chain delay features
 airlines = chain_delay_feature_engineering(airlines)
