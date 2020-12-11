@@ -3,6 +3,9 @@
 # MAGIC # Airline Delays
 # MAGIC ## MIDS W261 Final Project
 # MAGIC #### *Laura Herman, Michael Hubert, Robin Lashof-Regas, and Steven Leung*
+# MAGIC *View the full source code for our project in our <a href="https://github.com/RLashofRegas/mids-w261-final">GitHub repo</a>.*
+# MAGIC 
+# MAGIC *This repo has also been synced to DataBricks in <a href="https://dbc-c4580dc0-018b.cloud.databricks.com/?o=8229810859276230#folder/2834511320030435">this folder</a>.*
 
 # COMMAND ----------
 
@@ -400,6 +403,9 @@ plot_corr_matrix(corrmatrix, weather_df.columns)
 
 # MAGIC %md
 # MAGIC ## Data Transformations
+# MAGIC *View our full data pipeline <a href="https://dbc-c4580dc0-018b.cloud.databricks.com/?o=8229810859276230#notebook/2834511320030905/command/2834511320031004">here</a>.*
+# MAGIC 
+# MAGIC 
 # MAGIC With a basic understanding of the features we have to use for our model we will next discuss our approach to the data transformations we employed in our pipeline. This includes some work to facilitate a join between our two datasets which is discussed at the end of the next section.
 
 # COMMAND ----------
@@ -1241,6 +1247,8 @@ LEFT JOIN delays_by_carrier AS dco ON
 
 # MAGIC %md
 # MAGIC #### Base Model - Logistic Regression
+# MAGIC 
+# MAGIC *View the full Logistic Regression model notebook <a href="https://dbc-c4580dc0-018b.cloud.databricks.com/?o=8229810859276230#notebook/2834511320031942/command/2834511320031969">here</a>.*
 
 # COMMAND ----------
 
@@ -1364,6 +1372,8 @@ def metrics(predict_model):
 
 # MAGIC %md
 # MAGIC #### Exploratory Model - Gradient Boosted Trees
+# MAGIC 
+# MAGIC *View the full GBT model notebook <a href="https://dbc-c4580dc0-018b.cloud.databricks.com/?o=8229810859276230#notebook/2834511320031839/command/2834511320031903">here</a>.*
 
 # COMMAND ----------
 
@@ -1456,6 +1466,9 @@ def GBT_feature_importances(GBT_model, features):
 # COMMAND ----------
 
 # MAGIC %md #### Toy Example
+# MAGIC 
+# MAGIC *View the full toy example notebook <a href="https://dbc-c4580dc0-018b.cloud.databricks.com/?o=8229810859276230#notebook/2834511320031185/command/2834511320031631">here</a>.*
+# MAGIC 
 # MAGIC We have selected Random Forest (RF) as the final model based on results from the above exploritory algorithm analysis. While GBT and RF produced similar performance in our exploration, RF has the advantage of interpretability. The algorithm and math behind RF can be explained beginning with a simple decision tree. We will demonstrate a decision tree classifier using a toy example with 3 features from the flight delay training data and continue with an explanation of the additions/modifications for the RF algorithm.  
 # MAGIC 
 # MAGIC First we separate 20% of the training data that the toy model will use to make predictions. Then we select 3 important features from the dataset to visualize the trees that RF will build. The features we select are: whether the previous flight on the aircraft was delayed (feature 0), average delay at the origin airport 3 hours prior (feature 1), and hour of day of scheduled departure (feature 2).
@@ -1564,6 +1577,8 @@ display(spark.read.option("header", "true").parquet(toy_predict_RF_path))
 # COMMAND ----------
 
 # MAGIC %md #### Random Forest Implementation on Full Dataset
+# MAGIC 
+# MAGIC *View the full Random Forest model notebook <a href="https://dbc-c4580dc0-018b.cloud.databricks.com/?o=8229810859276230#notebook/2834511320031779/command/2834511320031807">here</a>.*
 
 # COMMAND ----------
 
