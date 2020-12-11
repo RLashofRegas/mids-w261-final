@@ -799,7 +799,7 @@ def imputer_mean(df):
   weather_numeric_with_nulls = ['origin_WND_speed_rate','origin_CIG_ceiling_height','origin_VIS_distance','origin_TMP_air_temperature','origin_DEW_dew_point_temp','dest_WND_speed_rate','dest_CIG_ceiling_height','dest_VIS_distance','dest_TMP_air_temperature','dest_DEW_dew_point_temp','origin_aa1_rain_depth','dest_aa1_rain_depth','origin_aj1_snow_depth','dest_aj1_snow_depth']
 
   imputer = Imputer(inputCols=weather_numeric_with_nulls, outputCols=weather_numeric_with_nulls)
-  model = imputer.fit(df)
+  model = imputer.fit(filter_to_train(df))
   df = model.transform(df)
 
   return df 
