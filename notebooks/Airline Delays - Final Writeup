@@ -8,20 +8,16 @@
 
 # MAGIC %md
 # MAGIC ## Question Formulation and Prior Research
-# MAGIC According to the Federal Aviation Administration (FAA), flight delays cost airlines and passengers over twenty eight billion dollars in 2018 [1]. For airlines this cost can be attributed to fuel waste, employee overtime, inefficient use of planes, loss of trust in the airline, and rebooking cost. For passengers this cost can be attributed to loss of productivity due to missed time at work, lost wages due to missing work, and overtime wages due to additional travel time. Some of these costs can be greatly reduced or eliminated if an airline could know in advance whether or not a given flight will be delayed. With this prediction ability, airlines can act early to mitigate the severity and frequency of delays. And on the customer side, passengers can plan ahead, leading to less disruption to their schedules and hopefully less time sitting around at an airport or on the tarmac. The purpose of this project is to predict whether a given flight will be delayed by 15 minutes or more (the FAA definition of a delay [2]), at least 2 hours before the scheduled departure. 
+# MAGIC According to the Federal Aviation Administration (FAA), flight delays cost airlines and passengers over twenty eight billion dollars in 2018 [1]. For airlines this cost can be attributed to fuel waste, employee overtime, inefficient use of planes, loss of trust in the airline, and rebooking cost. For passengers this cost can be attributed to loss of productivity due to missed time at work, lost wages due to missing work, and overtime wages due to additional travel time. Some of these costs can be greatly reduced or eliminated if an airline could know in advance whether or not a given flight will be delayed. With this prediction ability, airlines can act early to mitigate the severity and frequency of delays. On the customer side, passengers can plan ahead, leading to less disruption to their schedules and hopefully less time sitting around at an airport or on the tarmac. The purpose of this project is to predict whether a given flight will be delayed by 15 minutes or more (the FAA definition of a delay [2]), at least 2 hours before the scheduled departure. 
 # MAGIC 
-# MAGIC To accomplish this task we use data provided by the U.S. Department of Transportation (DOT) for passenger flight data between 2015 and 2019. We also augment this dataset with weather data from US weather stations provided by the National Oceanic and Atmospheric Administration over the same time period. We treat this problem as a classification problem with the goal to predict the value of the outcome variable labeled as *DEP_DEL15* in the DOT airlines dataset which indicates whether a flight was delayed by at least 15 minutes. As we perform our analysis our primary evaluation metric will be recall as the main business driver is to find as many of the delayed flights as possible as the impact is relatively less if we inacurately predict that an on-time flight will be delayed. That said, we want to make sure our model is not overfitting to this metric (for example predicting every flight as delayed), so we will also incorporate accuracy into our evaluation metrics.
+# MAGIC To accomplish this task we use data provided by the U.S. Department of Transportation (DOT) for passenger flight data between 2015 and 2019. We also augment this dataset with weather data from US weather stations provided by the National Oceanic and Atmospheric Administration over the same time period. We treat this problem as a classification problem with the goal of predicting the value of the outcome variable labeled as *DEP_DEL15* in the DOT airlines dataset which indicates whether a flight was delayed by at least 15 minutes. As we perform our analysis, our primary evaluation metric will be recall, as the main business driver is to find as many of the delayed flights as possible as the impact is relatively less if we inaccurately predict that an on-time flight will be delayed. That said, we want to make sure our model is not overfitting to this metric (for example, predicting every flight as delayed), so we will also incorporate accuracy into our evaluation metrics.
 # MAGIC 
-# MAGIC This is not a novel research question. Most studies incorporate airline and weather data as we have, while more use novel approaches to data collection such as IoT sensors [3]. The most common models used for this task include Ensemble Methods, K-Nearest Neighbors, and Neural Networks. We explore some of these options in the sections that follow. The best results we were able to find on this topic were those from L. Belcastro et al. [4] where they achieved 86% accuracy with 87% recall using a Random Forest model (Although these results were only calculated on a subset of delays and features were considered up until flight time as opposed to limiting to at least 2:15 beforehand). One of the key takeaways from this study was their method of categorizing delays as "Chain Delays" (delays caused by previous delays such as late-arriving aircraft) and "Root Cause Delays" (cause of original delay such as weather or maintenance). The following plot from the same study breaks down these delays:
+# MAGIC This is not a novel research question. Most studies incorporate airline and weather data as we have, while more use novel approaches to data collection such as IoT sensors [3]. The most common models used for this task include Ensemble Methods, K-Nearest Neighbors, and Neural Networks. We explore some of these options in the sections that follow. The best results we were able to find on this topic were those from L. Belcastro et al. [4] where they achieved 86% accuracy with 87% recall using a Random Forest model (Although these results were only calculated on a subset of delays and features were considered up until flight time as opposed to limiting to at least 2 hours beforehand). One of the key takeaways from this study was their method of categorizing delays as "Chain Delays" (delays caused by previous delays such as late-arriving aircraft) and "Root Cause Delays" (cause of original delay such as weather or maintenance). The following plot from the same study breaks down these delays:
 # MAGIC 
-# MAGIC [INSERT IMAGE VIA METHOD SUCH AS https://forums.databricks.com/questions/29012/how-to-show-an-image-in-a-notebook-using-html.html]
+# MAGIC <img src ='https://github.com/RLashofRegas/mids-w261-final/blob/main/notebooks/Screen%20Shot%202020-12-08%20at%2012.52.48%20AM.png?raw=true'>
+# MAGIC ___From Belcastro et al.___
 # MAGIC 
-# MAGIC We build on this concept in our work, operationalizing these concepts through novel engineered features to improve our models. We begin with some exploratory data analysis where we justify our feature engineering/selection and verify some of our assumptions and processing of the incoming data. Next we discuss the feature engineering we performed to capture the chain and root cause delay concepts mentioned above. Following this we show a few of the base models we tried and motivate our decision to focus on Random Forest. After this we deep dive into our model as well as some of the mathematical formulation of Random Forest itself. Finally, we discuss some key takeaways from this work, next steps, and briefly discuss how the analysis presented showcases what we've learned in the W261 course.
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC <img src ='https://s3-eu-west-1.amazonaws.com/cjp-rbi-cirium/wp-content/uploads/2018/11/07220730/pie-blg.png'>
+# MAGIC We build on this concept in our work, operationalizing these concepts through novel engineered features to improve our models. We begin with some exploratory data analysis where we justify our feature engineering/selection and verify some of our assumptions and processing of the incoming data. Next we discuss the feature engineering we performed to capture the chain and root cause delay concepts mentioned above. Following this, we show a few of the base models we tried and motivate our decision to focus on Random Forest. After this we deep dive into our model as well as some of the mathematical formulation of Random Forest itself. Finally, we discuss some key takeaways from this work, next steps, and briefly discuss how the analysis presented showcases what we've learned in the W261 course.
 
 # COMMAND ----------
 
@@ -32,7 +28,7 @@
 # MAGIC 1. Understand the columns available including any missing or invalid data as well as the format of that data.
 # MAGIC 2. Determine the distribution of relevant columns and their relationship with the outcome variable in order to give hints towards our feature engineering.
 # MAGIC 
-# MAGIC The obvious first step is to read in our data which is accomplished through the code below:
+# MAGIC Reading in the data and setting up our notebook is accomplished through the code below:
 
 # COMMAND ----------
 
@@ -91,16 +87,26 @@ test_data_output_path = final_project_path + "training_data_output/test.parquet"
 train_data_output_path_one_hot = final_project_path + "training_data_output/train_one_hot.parquet"
 test_data_output_path_one_hot = final_project_path + "training_data_output/test_one_hot.parquet"
 
+#Toy Model Path
 train_toy_output_path = "dbfs:/mnt/mids-w261/group_5/training_data_output/train_toy.parquet"
 test_toy_output_path = "dbfs:/mnt/mids-w261/group_5/training_data_output/test_toy.parquet"
+toy_predict_DT_path = "dbfs:/mnt/mids-w261/group_5/training_data_output/toy_predict_DT.parquet"
+toy_predict_RF_path = "dbfs:/mnt/mids-w261/group_5/training_data_output/toy_predict_RF.parquet"
+toy_RF_logic_path = "dbfs:/mnt/mids-w261/group_5/training_data_output/toy_RF_logic.parquet"
+
+#Evaluation files
+summary_table_path = final_project_path + 'summary_table.parquet'
+scoreandLabels_path = final_project_path + 'scoreandLabels.parquet'
 
 # COMMAND ----------
 
 # read in raw data
 airlines = spark.read.option("header", "true").parquet(airlines_data_path) # full airline dataset
+weather = spark.read.option("header", "true").parquet(weather_data_path) # full weather dataset
 
 # register temp view
 airlines.createOrReplaceTempView("airlines")
+weather.createOrReplaceTempView("weather")
 
 # COMMAND ----------
 
@@ -134,13 +140,13 @@ plt.show()
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC As we can see the distribution is uneven with an approximately 20/80 split between flights that were delayed and those that weren't. In the proceeding sections we describe our methods for handling this using over-sampling or class weight variables.
+# MAGIC As we can see the distribution is uneven with an approximately 20/80 split between flights that were delayed and those that weren't. In the subsequent sections we describe our methods for handling this using over-sampling or class weight variables.  Due to the imbalance in the outcome variable we will also have to explore adjusting the threshold for our base logistic regression model because the model may predict every flight as not delayed.
 # MAGIC 
-# MAGIC We also notice that there are a little over 1% nulls. A little more analysis (ommitted here for brevity) shows that of these 477,296 flights:
+# MAGIC We also notice that there are a little over 1% nulls. A little more analysis (omitted here for brevity) shows that of these 477,296 flights:
 # MAGIC 
-# MAGIC - 472,552 flights were cancelled - we choose to ignore these in our training set because an analysis of flight cancellatino prediction and causal inference is outside the scope of this project. This is another high-value business problem and a prime target for future work using the `cancellation_code` variable in this dataset. We will also omit cancelled flights from evaluation on our test set since making predictions on these flights is a seperate domain of outcomes.
+# MAGIC - 472,552 flights were cancelled - we choose to ignore these in our training set because an analysis of flight cancellation prediction and causal inference is outside the scope of this project. This is another high-value business problem and a prime target for future work using the `cancellation_code` variable in this dataset. We will also omit cancelled flights from evaluation on our test set since making predictions on these flights is a seperate domain of outcomes.
 # MAGIC - 4,739 flights had `crs_dep_time` (scheduled departure time) equal to `dep_time` (actual departure time). We assume these records are mislabeled since the rest of the fields for these flights appear normal. For this reason, we manually set the `dep_del15` column to 0 for these flights.
-# MAGIC - The final 5 flights are marked as `diverted` and have additional records for the new flight number assigned to those airplanes from the same departure airport. For this reason we choose to ignore them in our training set, and as above mark them as incorrect predictions regardless of our predicted class.
+# MAGIC - The final 5 flights are marked as `diverted` and have additional records for the new flight number assigned to those airplanes from the same departure airport. For this reason we choose to ignore them in our training set, and mark them as incorrect predictions regardless of our predicted class.
 
 # COMMAND ----------
 
@@ -208,7 +214,7 @@ Plot_Delays_Time(year_distribution_table_pandas.day_of_year,
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC We can see from above that the clearest correllation exists with the hour of the day because, while the number of flights is relatively constant for most of the day, the number of delays increases substantially as the day progresses. This makes sense given our preliminary research discussed in the first section in relation to "chain delays". As the day progresses it is more likely that there was a previous delay that may be affecting this flight causing more chain delays.
+# MAGIC We can see from above that the clearest correlation exists with the hour of the day because, while the number of flights is relatively constant for most of the day, the number of delays increases substantially as the day progresses. This makes sense given our preliminary research discussed in the first section in relation to "chain delays". As the day progresses it is more likely that there was a previous delay that may be affecting this flight causing more chain delays.
 # MAGIC 
 # MAGIC It is somewhat surprising to us that we do not see a strong signal based on the day of the week, but this is useful info nonetheless to help influence our choice of features.
 # MAGIC 
@@ -219,7 +225,7 @@ Plot_Delays_Time(year_distribution_table_pandas.day_of_year,
 # MAGIC %md
 # MAGIC The final relationship that we found useful to explore in the flights data relates to the airport. Building on our concepts of root cause delays and chain delays we hypothesize that delays will be clustered both by time and airport. This is because adverse weather conditions or airport-wide issues at a location would likely cause multiple root cause. In addition, the effect of these root cause delays would propogate and cause chain delays.
 # MAGIC 
-# MAGIC To understand this, we will view delay percentage by day for the top 5 airports in our data set. If delays are truly clustered, we would expect to see high variance in delay percentage from day to day and betweeen airports. For digestibility we only view Q1 2015.
+# MAGIC To understand this, we will view delay percentage by day for the top 5 airports in our data set. If delays are truly clustered, we would expect to see high variance in delay percentage from day to day and between airports. For digestibility we only view Q1 2015.
 
 # COMMAND ----------
 
@@ -256,6 +262,8 @@ plt.show()
 
 # MAGIC %md
 # MAGIC The plot above supports our hypothesis. For example on January 4th ORD had over 70% of flights delayed whereas SFO had only 32%. The data exhibits high variability of delay percentage between airports and days. This makes it clear that we need to capture airport-level statistics in our feature engineering (which we discuss further in the following section).
+# MAGIC 
+# MAGIC Our initial analysis of the airline data shows a potential non-linear, complex decision boundary between our classes. This points us towards models such as K-Nearest Neighbors, a decision tree or ensemble models 
 
 # COMMAND ----------
 
@@ -271,7 +279,7 @@ display(weather.limit(10))
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC As we can see there is a vast majority of columns with blanks for these example rows. In general as we look at the weather data we see this same trend - many of the columns are exremely specific and technical details around a single (relatively rare) weather condition. In addition, many weather stations do not capture all of the data fields.
+# MAGIC As we can see, there is a vast majority of columns with blanks for these example rows. In general as we look at the weather data we see this same trend - many of the columns are extremely specific and technical details around a single (relatively rare) weather condition. In addition, many weather stations do not capture all of the data fields.
 # MAGIC 
 # MAGIC Looking at some of the other columns that we would think would be useful such as visibility, wind details, temperature, dew point, etc. we see that they are mostly in a coded format that will require us to parse out the values we need (discussed further in the following section).
 # MAGIC 
@@ -340,7 +348,7 @@ ORDER BY origin_aa1_rain_depth"""))
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC As we can see from the above distributions these features appear to have strong correlations with departure delays and will be useful in our models.
+# MAGIC As we can see from the above distributions these features, particularly rain and snow depth and automated weather condition appear to have strong correlations with departure delays and will be useful in our models. We can also see that our features are on very different scales of values. Models such as decision trees and ensembles handle non-normalized features well and would be good candidate models.
 
 # COMMAND ----------
 
@@ -350,7 +358,7 @@ ORDER BY origin_aa1_rain_depth"""))
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC Before we utilize the weather features in our models we wanted to understand if certain variables are highly correlated.  As shown the correlation matrix below the air temperature and dew point temperature have a high correlation above .5.  As a result, we will only include one of these features in the models we build to prevent greater variance in our model parameter estimates as well as makes it easier for our decision trees to learn the features because it has to consider less features in training.  
+# MAGIC Before we utilize the weather features in our models we want to understand if certain variables are highly correlated.  As shown the correlation matrix below the air temperature and dew point temperature have a high correlation above .5.  As a result, we will only include one of these features in the models we build to prevent greater variance in our model parameter estimates as well as makes it easier for our decision trees to learn the features because it has to consider less features in training.  
 
 # COMMAND ----------
 
@@ -405,7 +413,7 @@ weather = spark.read.option("header", "true").parquet(weather_data_path) # full 
 # MAGIC %md
 # MAGIC #### Airlines Transformations
 # MAGIC 
-# MAGIC As per our EDA above, one of the first things we noticed is that we need to get rid of cancelled flights, impute the outcome variable where it is not set correctly, and remove additional records where the outcome variable is null and cannot be imputed:
+# MAGIC As per our EDA above, one of the first things we noticed is that we need to get rid of cancelled flights, impute the outcome variable where logical, and remove additional records where the outcome variable is null and cannot be imputed:
 
 # COMMAND ----------
 
@@ -414,9 +422,7 @@ airlines = airlines.where(col("cancelled") != 1)
 
 # Remove or impute flights with no outcome variable dep_del15 for training
 def outcome_variable(dep_del15, crs_dep_time, dep_time):
-    """
-    Function that labels outcome variable as not delayed if it is null and scheduled departure time and departure time are equal.
-    """
+    """Function that labels outcome variable as not delayed if it is null and scheduled departure time and departure time are equal."""
     if dep_del15 == None:
         if crs_dep_time == dep_time:
             dep_del15 = 0
@@ -441,6 +447,7 @@ airlines = airlines.where(col("dep_del15").isNotNull())
 # COMMAND ----------
 
 # Create SQL view of reference table for use in UTC conversion below
+city_timezone = spark.read.option("header", "false").csv(city_timezone_path) # table that maps city -> timezone
 city_timezone.createOrReplaceTempView("city_timezone")
 sqlContext.sql("""
 DROP VIEW IF EXISTS city_state_timezone
@@ -462,15 +469,14 @@ FROM city_timezone
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC In addition a small amount of cleanup is required on the airlines data to match this dataset:
+# MAGIC In addition the city name in the airlines data needs to match the city in the timezone dataset for a join:
 
 # COMMAND ----------
 
 # clean up origin and destination city names for join to timezone data
 
 def split_city_name(city_state):
-  '''UDF to deal with cases where dual cities are labeled
-  with a "/". Returns only first city '''
+  '''UDF to deal with cases where dual cities are labeled with a "/". Returns only first city.'''
 
   city = city_state.split(',')[0]
   state = city_state.split(',')[1]
@@ -489,7 +495,7 @@ airlines = airlines \
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC Using this dataset we can create UTC timestamps from the airlines data. In addition, to facilitate our weather join, we truncate times to the hour so that we can aggregate flight and weather data from similar timeframes. We accomplish this with the following procedure:
+# MAGIC Using this dataset we can create UTC timestamps from the airlines data. In addition, to facilitate our weather join, we truncate times to the hour so that we can aggregate flight and weather data from the same timeframes. We accomplish this with the following procedure:
 # MAGIC 1. Pad the `crs_dep_time` with zeros to make them equal length.
 # MAGIC 2. Concatenate the padded field with the `fl_date` to create a timestamp string.
 # MAGIC 3. Convert the string to a timestamp.
@@ -497,7 +503,7 @@ airlines = airlines \
 # MAGIC 5. Join to the `city_state_timezone` view to get the timezone.
 # MAGIC 6. Convert to UTC timestamp using the timezone.
 # MAGIC 
-# MAGIC In addition, in the view below we reduce the number of features we are selecting to the ones we need later on in order to reduce processing.
+# MAGIC In addition, in the view below we reduce the number of features to the ones we will need later on in order to reduce processing.
 
 # COMMAND ----------
 
@@ -565,7 +571,7 @@ airlines = sqlContext.sql("SELECT * FROM airlines").cache()
 # MAGIC 
 # MAGIC For the weather dataset we first needed to determine a method for joining to the airlines dataset. After this we perform some data parsing to separate out the weather fields that contain multiple data elements into individual features.
 # MAGIC 
-# MAGIC For the join to the airlines dataset we determined that, in cases where a weather station resides at an airport, the `call_sign` field refers to the FAA location identifier [6]. This is equivalent to the `origin` or `dest` (from the airlines dataset) but with a leading "K". Assuming that all airports have a weather station associated with them these fields can be used to join the two datasets together. As seen below, we determined that 43 airports did not have a weather station associated with their location code. However, this only accounts for 4.5% of the total flights. We deemed this an acceptable loss for this initial study due to the overall quality of the weather data from statsions associated with airports - they exhibited <4% missing data for any of our selected weather features as opposed to **XX%** missing over all weather stations. If we were to expand on this research we would come back to this loss and join the remaining airports to stations using the latitude and longitude. The following method creates the `airport_code` from the weather dataset:
+# MAGIC For the join to the airlines dataset we determined that, in cases where a weather station resides at an airport, the `call_sign` field refers to the FAA location identifier [6]. This is equivalent to the `origin` or `dest` (from the airlines dataset) but with a leading "K". Assuming that all airports have a weather station associated with them these fields can be used to join the two datasets together. As seen below, we determined that 43 airports did not have a weather station associated with their location code. However, this only accounts for 4.5% of the total flights. We deemed this an acceptable loss for this initial study due to the overall quality of the weather data from stations associated with airports - they exhibited **XX%** missing data for any of our selected weather features as opposed to about 4% missing over all weather stations. Additionally, the percentage of delayed flights for airports with weather stations is not significantly different than the percentage of delayed flights without a weather station. If we were to expand on this research we would come back to this loss and join the remaining airports to stations using the latitude and longitude. The following method creates the `airport_code` from the weather dataset:
 
 # COMMAND ----------
 
@@ -656,7 +662,7 @@ weather = sqlContext.sql("SELECT * FROM weather").cache()
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC With the joining fields out of the way we can move on to focus on the weather data itself. As many of the weather fields contain multiple data elements embedded within them, we needed to parse these fields in order to create individual numeric and categorical features. Using the specification provided by NOAA we were able to accomplish this with the below method [7]:
+# MAGIC With the joining fields processing out of the way we can move on to focus on the weather data itself. As many of the weather fields contain multiple data elements embedded within them, we needed to parse these fields in order to create individual numeric and categorical features. Using the specification provided by NOAA we were able to accomplish this with the below method [7]:
 
 # COMMAND ----------
 
@@ -762,7 +768,7 @@ def present_weather_parse(df,column_name='AW1'):
   
   return df
 
-#SNOW DEPTH AT TIME OF READING- ASSUMPTION IS THAT A BLANK READING INDICATES 0 SNOW DEPTH
+#Snow Depth at time of reading- Assumption is that a blank reading indicates 0 snow depth
 def snow_dimension_parse(df,column_name = 'AJ1'):
   '''Parse 1st item of aj1 reading. '''
   split_col = f.split(df[column_name], ',')
@@ -773,7 +779,7 @@ def snow_dimension_parse(df,column_name = 'AJ1'):
 
   return df
 
-#RAIN DEPTH AT TIME OF READING- ASSUMPTION IS THAT A BLANK READING INDICATES 0 RAIN DEPTH
+#Rain depth at time of reading- Assumption is that a blank reading indicates 0 rain depth
 def rain_dimension_parse(df,column_name = 'AA1'):
   '''Parse 2nd item of AA1 reading'''
   split_col = f.split(df[column_name], ',')
@@ -798,7 +804,7 @@ weather = rain_dimension_parse(weather)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC In our <a href="https://github.com/RLashofRegas/mids-w261-final/blob/main/notebooks/Airline%20Delays%20-%20Data%20Processing%20Pipeline.py">full data pipeline</a> the above is saved into the files that are read in at the beginning of the next section. This is omitted here due to performance contraints.
+# MAGIC In our <a href="https://github.com/RLashofRegas/mids-w261-final/blob/main/notebooks/Airline%20Delays%20-%20Data%20Processing%20Pipeline.py">full data pipeline</a> the above is saved into the files that are read in at the beginning of the next section.
 
 # COMMAND ----------
 
@@ -825,9 +831,9 @@ weather.createOrReplaceTempView("weather")
 # MAGIC %md
 # MAGIC ##### Root Cause Delays
 # MAGIC 
-# MAGIC Root cause delays are those that are caused by external force such as weather, security delays, and delays caused by air traffic control (such as traffic on the runway). Fortunately, the flights data provides very good built-in features about the cause of delays. The columns `taxi_out` (time to taxi from gate to takeoff), `weather_delay` (minutes delayed due to *severe* weather), `nas_delay` (minutes delayed by the FAA, includes inclement but not severe weather), and `security_delay` (minutes delayed due to security backup) all indicate a root cause delay. Our job is to aggregate these fields in a way that will allow us to use the information from these fields from 2 hours prior to the flight we are trying to predict. In addition and in relation to the fields described above we also look at the total number of flights because it is more likely that an airport will be backed up (security delay, runway traffic) if there are a lot of flights at a certain time.
+# MAGIC Root cause delays are those that are caused by external forces such as weather, security delays, and delays caused by air traffic control (such as traffic on the runway). Fortunately, the flights data provides very good built-in features about the cause of delays. The columns `taxi_out` (time to taxi from gate to takeoff), `weather_delay` (minutes delayed due to *severe* weather), `nas_delay` (minutes delayed by the FAA, includes inclement but not severe weather), and `security_delay` (minutes delayed due to security backup) all indicate a root cause delay. Our job is to aggregate these fields in a way that will allow us to use the information from these fields from 2 hours prior to the flight we are trying to predict. In addition and in relation to the fields described above we also look at the total number of flights because it is more likely that an airport will be backed up (security delay, runway traffic) if there are a lot of flights at a certain time.
 # MAGIC 
-# MAGIC One thing to notice about these features is that they are all related to a specific location/airport. When there is a large storm, a backup at security, or a traffic jam on the runway it is much more likely to affect the entire airport rather than just a single flight. Because of this it makes sense to aggregate these features by airport. In addition, due to the temporal nature of our problem and these features we also need to group by the time. Finally, we also observe that the impact (and availability) of these features will be highly dependent on the airport in question. As a result, we need a way to construct these features such that they can be used independently of the airport. A big motivation for this has to do with our model choice. As described in the next section, the primary model we use for this study is a random forest. With a limited max depth we believe it would be unlikely that the model would have sufficient resources to learn the unique distributions of these features for each airport. For example when looking at the number of flights, you cannot compare the number of flights in a given hour between Chicago O'Hare (ORD) and a small airport like Lehigh Valley in Allentown, PA (ABE). To fix this issue we compare our aggregated features in a given hour to the same aggregation for the given airport across the whole dataset.
+# MAGIC One thing to notice about these features is that they are all related to a specific location/airport. When there is a large storm, a backup at security, or a traffic jam on the runway, it is much more likely to affect the entire airport rather than just a single flight. Because of this it makes sense to aggregate these features by airport. In addition, due to the temporal nature of our problem and these features we also need to group by the time. Finally, we also observe that the impact (and availability) of these features will be highly dependent on the airport in question. As a result, we need a way to construct these features such that they can be used independently of the airport. A big motivation for this has to do with our model choice. As described in the next section, the primary model we use for this study is a random forest. With a limited max depth we believe it would be unlikely that the model would have sufficient resources to learn the unique distributions of these features for each airport. For example when looking at the number of flights, you cannot compare the number of flights in a given hour between Chicago O'Hare (ORD) and a small airport like Lehigh Valley in Allentown, PA (ABE). To fix this issue we compare our aggregated features in a given hour to the same aggregation for the given airport across the whole dataset.
 # MAGIC 
 # MAGIC With these concepts in mind, we present below the methods we used to capture these features.
 
@@ -863,7 +869,7 @@ GROUP BY
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC The following view uses the result above to normalize hourly aggregations by airport. Again we replace nulls with zero, however in addition we replace zeros from the total airport-level aggregations with a small number (0.1). This second step avoids a divide by zero issue and makes sense as a simple normalization method becuase while some very small airports may have zero security delays in our dataset that doesn't correspond to there being a true 0% chance of having a security delay at that airport.
+# MAGIC The following view uses the result above to normalize hourly aggregations by airport. Again we replace nulls with zero, however in addition we replace zeros from the total airport-level aggregations with a small number (0.1). This second step avoids a divide by zero issue and makes sense as a simple normalization method because while some very small airports may have zero security delays in our dataset, that doesn't correspond to there being a true 0% chance of having a security delay at that airport.
 
 # COMMAND ----------
 
@@ -982,6 +988,8 @@ airlines.createOrReplaceTempView("airlines")
 # MAGIC ##### Chain Delays
 # MAGIC 
 # MAGIC While we already have a few features above that may give some indication of a chain delay, we hypothesize that the most important indication of a chain delay is whether the previous flight on the same airplane was delayed. To determine this we use the `tail_num` column to track an individual airplane and understand if it is experiencing delays throughout the day. To do this we have to be very careful not to have data leakage between our train and test sets. First of all, we need to make sure we are looking back at least two hours and fifteen minutes as our target variable (`dep_del15`) is only determinable in a real life circumstance 15 minutes after the scheduled departure of a given flight. In addition, the previous flight could be within two hours and fifteen minutes of the current flight. To account for this we look at the last two flights and use the second most recent if the most recent is within two hours and fifteen minutes. Our methods are presented below.
+# MAGIC 
+# MAGIC We also consider the scenario in which the previous flight on the same aircraft was delayed, but the flight was far enough beforehand that the delay would not reasonably be expected to have an effect on the next flight. To account for this we consider flights that are schedule to arrive 5 hours before the current flight as non-delayed for the chain delay feature.
 
 # COMMAND ----------
 
@@ -996,7 +1004,7 @@ def chain_delay_feature_engineering(airline_df):
   airline_df.createOrReplaceTempView("airlines_temp_view")
   
   #Store new df with limited number of ordered columns that we can use to window 
-  airlines_aircraft_tracking = airline_df[["tail_num","fl_date","origin_city_name", "dest_city_name", "dep_del15", "crs_dep_time_utc", "crs_dep_minus_two_fifteen_utc"]].orderBy("tail_num","fl_date", "crs_dep_time_utc")
+  airlines_aircraft_tracking = airline_df[["tail_num","fl_date","origin_city_name", "dest_city_name", "dep_del15", "crs_dep_time_utc", "crs_dep_minus_two_fifteen_utc", "crs_arr_time_utc"]].orderBy("tail_num","fl_date", "crs_dep_time_utc")
   
   #This section is related to windowing so that we can pull information from previous flight and flight 2 before current flight. Windowing will only pull for the same tail number
   w = Window.partitionBy("tail_num").orderBy("crs_dep_time_utc")
@@ -1023,9 +1031,6 @@ def chain_delay_feature_engineering(airline_df):
         return int(delay_two_before)
     except:
       return 'null'
-  #NEED TO RETURN TO THIS AND DECIDE WHAT TO DO IF FLIGHT 2 PREVIOUS WAS WITHIN 2:15. I BELIEVE MOST (ALL?) OF THOSE ARE DATA CLEANSING ISSUES
-  #ALSO SHOULD LOOK AT THE CASES WHERE THE PREVIOUS FLIGHT WAS SO MUCH EARLIER THAT ITS DELAY DOES NOT REALLY AFFECT CURRENT FLIGHT. HOW MUCH EARLIER
-  #SHOULD THAT BE?
 
   chain_delay_analysis_udf = f.udf(chain_delay_analysis)
 
@@ -1048,31 +1053,9 @@ def chain_delay_feature_engineering(airline_df):
 
 # MAGIC %md
 # MAGIC To ensure our hypothesis is valid we explore below some additional EDA after making this new feature.
-
-# COMMAND ----------
-
-# add chain delay features
-airlines = chain_delay_feature_engineering(airlines)
-
-# replace temp view
-airlines.createOrReplaceTempView("airlines")
-
-# !!!!!TODO: convert this to a seaborn plot!!!!!!
-display(sqlContext.sql("""
-SELECT
-  PREVIOUS_FLIGHT_DELAYED_FOR_MODELS AS previous_flight_delayed,
-  COUNT(*) AS num_flights,
-  SUM(dep_del15) AS num_delayed
-FROM airlines
-WHERE
-  PREVIOUS_FLIGHT_DELAYED_FOR_MODELS IS NOT NULL
-GROUP BY
-  PREVIOUS_FLIGHT_DELAYED_FOR_MODELS
-"""))
-
-# COMMAND ----------
-
-# MAGIC %md
+# MAGIC 
+# MAGIC <img src="https://github.com/RLashofRegas/mids-w261-final/blob/main/notebooks/previous_flight_delayed_eda.png?raw=true" width="450" height="650"/>
+# MAGIC 
 # MAGIC As seen above, the percent of flights delayed when the previous flight is delayed (46%) is much higher than when it is not (14%). This supports our hypothesis and we expect this to be a very strong feature in our models.
 # MAGIC 
 # MAGIC One additional feature we felt was important to capture based on our EDA was the correlation of delays to the hour of the day. As we observed, as delays throughout the day build on each other we observe on increase in the number of delays in the evening. To account for this we add a categorical variable for the hour of departure:
@@ -1080,9 +1063,7 @@ GROUP BY
 # COMMAND ----------
 
 def crs_dep_hour(crs_dep_time):
-  '''
-  Takes crs_dep_time scheduled departure time and creates categorical variable for hour of scheduled departure.
-  '''
+  '''Takes crs_dep_time scheduled departure time and creates categorical variable for hour of scheduled departure.'''
   str_time = str(crs_dep_time)
   if len(str_time) < 4:
       crs_dep_hour = str(0) + str_time[0]
@@ -1104,7 +1085,7 @@ airlines.createOrReplaceTempView("airlines")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC To identify weather patterns that could cause delays, we filtered our training data to look at flights that had a weather delay and did not have a weather delay to understand what types of weather thresholds could be used to create indicator variables.  After reviewing the summary statistics for the weather variables, we decided to create four weather indicator variables to increase the signal we might see from the weather features in our models.  The first feature we created was focused on identifying flights that had very low ceiling height below 2,000.  Per the summary statisitic tables below, the average origin ceiling height for weather delays is 4,000 below the ceiling height for non weather delay flights. Moreover, we also noticed the origin wind speed rate is higher for weather delayed flights so we created an indicator that highlights if wind is above 50.  The last two features we created focused on winter and summer temperature trends.  Per the origin air temperature histograms below, the weather delayed flights had a higher percentage of summer flights with below air temperature values below 0, so we created a indicator variable to identify these types of weather patterns during the summer. 
+# MAGIC To identify weather patterns that could cause delays, we filtered our training data to look at flights that had a weather delay and did not have a weather delay to understand what types of weather thresholds could be used to create indicator variables.  After reviewing the summary statistics for the weather variables, we decided to create four weather indicator variables to increase the signal we might see from the weather features in our models.  The first feature we created was focused on identifying flights that had very low ceiling height below 2,000.  Per the summary statistic tables below, the average origin ceiling height for weather delays is 4,000 below the ceiling height for non weather delay flights. Moreover, we also noticed the origin wind speed rate is higher for weather delayed flights so we created an indicator that highlights if wind is above 50.  The last two features we created focused on winter and summer temperature trends.  Per the origin air temperature histograms below, the weather delayed flights had a higher percentage of summer flights with below air temperature values below 0, so we created a indicator variable to identify these types of weather patterns during the summer. 
 
 # COMMAND ----------
 
@@ -1122,11 +1103,10 @@ display(train_log.filter(col('weather_15_delay_indicator')==0).select('origin_WN
 
 # COMMAND ----------
 
-summer_months=[5,6,7,8,9,10]
-winter_months=[1,2,3,4,11,12]
-
-#Review histogram of air temperatures associated with weather delays (1) and flights with no weather delay (0) during the summer
-train_log.filter(~col('month').isin(summer_months)).select('origin_TMP_air_temperature',"weather_15_delay_indicator").display()
+# MAGIC %md
+# MAGIC Review histogram of air temperatures associated with weather delays (1) and flights with no weather delay (0) during the summer (May-October).
+# MAGIC 
+# MAGIC <img src="https://github.com/RLashofRegas/mids-w261-final/blob/main/notebooks/air_temp_summer.jpg?raw=true" width="800" height="1000"/>
 
 # COMMAND ----------
 
@@ -1265,22 +1245,120 @@ LEFT JOIN delays_by_carrier AS dco ON
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC Our base model is a logistic regression classification model with a subset of the airline and weather features. We included features to capture seasonality, recent weather patterns at the origin airport, time of day, as well as two engineered features that captured whether a previous flight was delayed and whether the day of the flight was a holiday. During our EDA we identified that dew point and air temp were strongly correlated so we only included air temperature to capture the most recent temperature. When we ran our initial logistic regression model, we observed that the model always predicted that there was no delay due to the imbalance in the dataset with under 20% of flights being delayed. To account for the imbalance of the outcome variable we explored two options for the base model including a weight column that utilizes a balancing ratio and adjusting the threshold for the model to a value closer to the mix of delays to no delays. The threshold was slightly more effective at improving recall for our model than the weighted column so we utilitized the threshold in our base model which is shown below. As we increased the threshold from .18 to .5 we noticed a large drop in recall with an increase in accuracy, we found that a threshold below .2 had good balance of accuracy and recall. The most noticeable improvement in the model accuracy and recall came when we added the previous flight delay feature, which signaled to us that this feature maybe very important to include in future models. Our base model had an accuracy and recall of **XX and XX (Pending Model Updates**). In our next models we explore using a broader set of the features available as well as additional methods for handling the imbalance of the outcome variable in the dataset.
+# MAGIC Our base model is a logistic regression classification model with a subset of the airline and weather features. We included features to capture seasonality, recent weather patterns at the origin airport, time of day, as well as two engineered features that captured whether a previous flight was delayed and whether the day of the flight was a holiday. During our EDA we identified that dew point and air temp were strongly correlated so we only included air temperature to capture the most recent temperature.   
+# MAGIC 
+# MAGIC When we ran our initial logistic regression model, we observed that the model always predicted that there was no delay due to the imbalance in the dataset with under 20% of flights being delayed. To account for the imbalance of the outcome variable we explored two options for the base model including a weight column that utilizes a balancing ratio and adjusting the threshold for the model to a value closer to the mix of delays to no delays. The threshold was slightly more effective at improving recall for our model than the weighted column so we utilitized the threshold in our base model which is shown below. As we increased the threshold from 0.18 to 0.5 we noticed a large drop in recall with an increase in accuracy, we found that a threshold below 0.2 had good balance of accuracy and recall.  
+# MAGIC 
+# MAGIC The most noticeable improvement in the model accuracy and recall came when we added the previous flight delay feature, which signaled to us that this feature may be very important to include in future models. Our base model had an accuracy and recall of 0.75 and 0.56 on both our training data and test data. In our next models we explore using a broader set of the features available as well as additional methods for handling the imbalance of the outcome variable in the dataset.  
+# MAGIC 
+# MAGIC The code below is what we used to train our logistic regression. We used 3-fold cross-validation for this model to train on different train/test splits and improve performance on the unseen test set. 
 
 # COMMAND ----------
 
-# MAGIC %md Insert Base Model Performance
+def train_logistic_regression(train_log):
+  '''Function to train logistic regression model including creating pipeline to assemble features, scale features, grid search hyperparameters, and run a cross validation model'''
+  
+  selected_features = ["month_Indicator","day_of_week_Indicator","crs_dep_hour_Indicator","op_unique_carrier_Indicator","origin_WND_speed_rate","origin_CIG_ceiling_height","origin_VIS_distance","origin_TMP_air_temperature","Holiday_Indicator","PREVIOUS_FLIGHT_DELAYED_FOR_MODELS_Indicator","label"]
 
-# COMMAND ----------
+  #Drop any nulls for the training set 
+  training_set = train_log.select(selected_features).dropna()
 
-# MAGIC %md
-# MAGIC The code below is what we used to train our logistic regression:
+  #Convert outcome variable to integer type 
+  training_set = training_set.withColumn('label', training_set['label'].cast(IntegerType()))  
+  
+  #Drop label from variables that will be passed to vector assembler
+  train_cols = training_set.columns
+  train_cols.remove("label")
 
-# COMMAND ----------
+  #Combine training input columns into a single vector
+  assembler = VectorAssembler(inputCols=train_cols,outputCol="features").setHandleInvalid("keep")
 
-def train_logistic_regression():
-  # code
-  pass
+  #Scale features 
+  standardscaler=StandardScaler().setInputCol("features").setOutputCol("Scaled_features")
+
+  #Create logisitic regression model and model pipeline
+  lr = LogisticRegression(labelCol="label", featuresCol="Scaled_features")
+  pipeline = Pipeline(stages=[assembler,standardscaler,lr])
+
+  #Create parameter grid search 
+  paramGrid = ParamGridBuilder() \
+    .addGrid(lr.threshold, [.185]) \
+    .addGrid(lr.maxIter, [10,20]) \
+    .addGrid(lr.regParam, [0.1]) \
+    .build()
+
+  #Create cross validation model 
+  crossval = CrossValidator(estimator=pipeline,
+                          estimatorParamMaps=paramGrid,
+                          evaluator=BinaryClassificationEvaluator(),
+                          numFolds=3) 
+
+  evaluator = BinaryClassificationEvaluator(labelCol="label", metricName="areaUnderPR")
+
+  cvModel = crossval.fit(training_set)
+
+  return cvModel
+
+def best_model_parameters(cvModel):
+  '''Function to extract the hyperparameters of the best model from the Cross Validation model'''
+
+  #Extract best model parameters from cvModel
+  best_model = cvModel.bestModel
+  parameter_dict = best_model.stages[-1].extractParamMap()
+
+  #Create dictionary and update with best model parameters
+  parameter_dict_blank = {}
+  for x, y in parameter_dict.items():
+    parameter_dict_blank[x.name] = y
+
+  print("Best Regularization Parameter",parameter_dict_blank["regParam"])
+  print("Best Iteration Parameter",parameter_dict_blank["maxIter"])
+  print("Best Threshold Parameter",parameter_dict_blank["threshold"])
+
+def predict_train_test(cvModel,df):
+  '''Function to predict using best Cv model'''
+
+  #Review performance on training data 
+  predict_model = cvModel.transform(df)
+  evaluator = BinaryClassificationEvaluator(labelCol="label", metricName="areaUnderPR")
+  predict_metric = evaluator.evaluate(predict_model)
+  print("Area_UnderPR",predict_metric)
+  
+  return predict_model
+
+def metrics(predict_model):
+  '''Function to calculate key performance metrics on model that has predictions'''
+
+  #Calculate metrics to evaluate accuracy, precsision, recall and f1 score for model
+  true_positive = predict_model[(predict_model.label == 1) & (predict_model.prediction == 1)].count()
+  true_negative = predict_model[(predict_model.label == 0) & (predict_model.prediction == 0)].count()
+  false_positive = predict_model[(predict_model.label == 0) & (predict_model.prediction == 1)].count()
+  false_negative = predict_model[(predict_model.label == 1) & (predict_model.prediction == 0)].count()
+  accuracy = ((true_positive + true_negative)/predict_model.count())
+
+  if(true_positive + false_negative == 0.0):
+    recall = 0.0
+    precision = float(true_positive) / (true_positive + false_positive)
+    
+  elif(true_positive + false_positive == 0.0):
+    recall = float(true_positive) / (true_positive + false_negative)
+    precision = 0.0
+    
+  else:
+    recall = float(true_positive) / (true_positive + false_negative)
+    precision = float(true_positive) / (true_positive + false_positive)
+
+  if(precision + recall == 0):
+    f1_score = 0
+    
+  else:
+    f1_score = 2 * ((precision * recall)/(precision + recall))   
+    
+  print("Model_Performance")
+  print("Accuracy:", accuracy)
+  print("Recall:", recall)
+  print("Precision: ", precision)
+  print("F1 score:", f1_score)  
 
 # COMMAND ----------
 
@@ -1289,26 +1367,23 @@ def train_logistic_regression():
 
 # COMMAND ----------
 
-# MAGIC %md We also explored tree classification models for predicting flight delays including Gradient Boosted Trees (GBT). Boosting uses an ensemble of trees similar to bagging but grows trees sequentially to improve the model. To explore GBT we used features for seasonality, time of day, airport and airline summary statistics, and the mandatory variables in the NOAA weather data. The tree will take care of feature selection.    
-# MAGIC The primary tuning parameters for GBT are: number of trees (iterations), max depth of each tree, and the rate at which boosting learns (step size). We first tuned by increasing the max iterations starting at 10 up to 100. Using 100 trees improves the model but increasing further provides diminishing returns. We also tuned the max depth of the tree from 1 to 10. Many times small trees, even stump trees with 1 split, work well for GBT to slowly improve predictions. This tuning was performed using step size 0.1.   
-# MAGIC We used 3-fold cross-validation for this model to train on different train/test splits and improve performance on the unseen test set.
-
-# COMMAND ----------
-
-# MAGIC %md The code below was used to train the GBT exploratory model.
+# MAGIC %md We also explored tree classification models for predicting flight delays including Gradient Boosted Trees (GBT). Boosting uses an ensemble of trees similar to bagging but grows trees sequentially to improve the model. To explore GBT we used features for seasonality, time of day, a holiday indicator, airport and airline summary statistics, and the mandatory variables in the NOAA weather data. The tree will take care of feature selection. The top feature importances for this model were: whether the previous flight was delayed (0.134), hour of departure (0.101), month (0.077), and carrier (0.074).  
+# MAGIC 
+# MAGIC The primary tuning parameters for GBT are: number of trees (iterations), max depth of each tree, and the rate at which boosting learns (step size). Since attempting to do a wide grid search on the number of trees and max depth was very computationally intensive, we first tuned the max iterations starting at 10 up to 200 and found that training about 100 trees improves the model but increasing further provided diminishing returns. We then tuned the max depth of the tree from 1 to 10. Because building trees sequentially with boosting aims to learn based on residuals of previous trees, many times small trees, even stump trees with one split, can work well for GBT so that it can slowly improve areas of the tree that aren’t performing well. The best model of these had a max depth of 10. This tuning was performed using step size 0.1. Decreasing the step size so that the model learned more slowly did not improve performance.     
+# MAGIC 
+# MAGIC For tuning our final model we focused on accuracy and recall which for the exploratory GBT model were 0.77 and 0.45 respectively. For the final Random Forest model, we will explore over/under sampling to increase recall.
+# MAGIC 
+# MAGIC The code below was used to train the GBT exploratory model. Due to computational constraints, a separated validation set was used rather than cross-validation.
 
 # COMMAND ----------
 
 def vectorize_features(train_GBT, test_GBT):
-    """Assemble categorical and continuous features into a vector to feed into GBT model.""" 
+    """Assemble features into a vector to feed into GBT model.""" 
     
-    categorical = ["month", "day_of_week", "op_unique_carrier", "Holiday", "PREVIOUS_FLIGHT_DELAYED_FOR_MODELS", "origin_WND_type_code", "origin_CIG_ceiling_visibility_okay", "origin_VIS_variability", "dest_WND_type_code", "dest_CIG_ceiling_visibility_okay", "dest_VIS_variability", "crs_dep_hour"]
-
-    categorical_index = [i + "_Index" for i in categorical]
-
-    numeric = ["origin_num_flights","origin_avg_dep_delay", "origin_pct_dep_del15", "origin_avg_taxi_time", "origin_avg_weather_delay", "origin_avg_nas_delay", "origin_avg_security_delay", "origin_avg_late_aircraft_delay", "dest_num_flights","dest_avg_dep_delay", "dest_pct_dep_del15", "dest_avg_taxi_time", "dest_avg_weather_delay", "dest_avg_nas_delay", "dest_avg_security_delay", "dest_avg_late_aircraft_delay", "carrier_num_flights", "carrier_avg_dep_delay", "carrier_avg_carrier_delay", "origin_WND_direction_angle", "origin_WND_speed_rate", "origin_CIG_ceiling_height", "origin_VIS_distance", "origin_TMP_air_temperature", "origin_DEW_dew_point_temp", "origin_SLP_sea_level_pressure", "dest_WND_direction_angle", "dest_WND_speed_rate", "dest_CIG_ceiling_height", "dest_VIS_distance", "dest_TMP_air_temperature", "dest_DEW_dew_point_temp", "dest_SLP_sea_level_pressure"]
-
-    features = categorical_index + numeric
+    # Choose features
+    features = ["month_Index", "day_of_week_Index", "op_unique_carrier_Index", "Holiday_Index", "PREVIOUS_FLIGHT_DELAYED_FOR_MODELS_Index", "origin_WND_type_code_Index", "origin_CIG_ceiling_visibility_okay_Index", "origin_VIS_variability_Index", "dest_WND_type_code_Index", "dest_CIG_ceiling_visibility_okay_Index", "dest_VIS_variability_Index", "crs_dep_hour_Index", "origin_num_flights","origin_avg_dep_delay", "origin_pct_dep_del15", "origin_avg_taxi_time", "origin_avg_weather_delay", "origin_avg_nas_delay", "origin_avg_security_delay", "origin_avg_late_aircraft_delay", "dest_num_flights","dest_avg_dep_delay", "dest_pct_dep_del15", "dest_avg_taxi_time", "dest_avg_weather_delay", "dest_avg_nas_delay", "dest_avg_security_delay", "dest_avg_late_aircraft_delay", "carrier_num_flights", "carrier_avg_dep_delay", "carrier_avg_carrier_delay", "origin_WND_direction_angle", "origin_WND_speed_rate", "origin_CIG_ceiling_height", "origin_VIS_distance", "origin_TMP_air_temperature", "origin_SLP_sea_level_pressure", "dest_WND_direction_angle", "dest_WND_speed_rate", "dest_CIG_ceiling_height", "dest_VIS_distance", "dest_TMP_air_temperature", "dest_SLP_sea_level_pressure"]
+    
+    # Assemble features into vector for train and test set
     assembler = VectorAssembler(inputCols=features, outputCol="features").setHandleInvalid("skip")
 
     train_GBT = assembler.transform(train_GBT)
@@ -1316,33 +1391,62 @@ def vectorize_features(train_GBT, test_GBT):
     
     return train_GBT, test_GBT, features
   
-def train_model(train_GBT):
+def train_GBT_model(train_GBT):
     """Train a GBT model."""
-    gbt = GBTClassifier(labelCol="label", featuresCol="features")
-        
-    paramGrid = ParamGridBuilder()\
-                .addGrid(gbt.maxDepth, [2, 5])\
-                .addGrid(gbt.maxIter, [10, 100])\
-                .build()
-
-    evaluator = BinaryClassificationEvaluator(labelCol="label")
-
-    cv = CrossValidator(estimator=gbt, evaluator=evaluator, estimatorParamMaps=paramGrid, numFolds = 3)
+    
+    # Define GBT model for 100 trees
+    gbt = GBTClassifier(labelCol="label", featuresCol="features", maxIter = 100, maxDepth=10)
 
     # Train GBT model with cross validation
-    GBT_model = cv.fit(train_GBT)
+    GBT_model = gbt.fit(train_GBT)
     
     return GBT_model
 
-def feature_importances(GBT_model, features):
+def evaluate_GBT_model(GBT_model, test_GBT):
+    """Evaluate best model on the test set."""
+    
+    # Make predictions on test set
+    predictions = GBT_model.transform(test_GBT)
+    
+    # Create dataframe of predictions with labels
+    labelAndPrediction = predictions.select("label", "prediction", "features")
+    
+    # Calculate performance metrics from predictions
+    TP = labelAndPrediction.where((labelAndPrediction.label == 1) & (labelAndPrediction.prediction == 1)).count()
+    FP = labelAndPrediction.where((labelAndPrediction.label == 0) & (labelAndPrediction.prediction == 1)).count()
+    TN = labelAndPrediction.where((labelAndPrediction.label == 0) & (labelAndPrediction.prediction == 0)).count()
+    FN = labelAndPrediction.where((labelAndPrediction.label == 1) & (labelAndPrediction.prediction == 0)).count()
+    accuracy = (TP + TN)/labelAndPrediction.count()
+    
+    if TP + FN == 0:
+        recall = 0
+        precision = float(TP) / (TP + FP)
+    
+    elif TP + FP == 0:
+        recall = float(TP) / (TP + FN)
+        precision = 0
+    
+    else:
+        recall = float(TP) / (TP + FN)
+        precision = float(TP) / (TP + FP)
+
+    if precision + recall == 0:
+        f1_score = 0
+    
+    else:
+      f1_score = 2 * ((precision * recall)/(precision + recall))  
+
+    print('Accuracy: {:.3f}'.format(accuracy))
+    print('Recall: {:.3f}'.format(recall))
+    print('Precision: {:.3f}'.format(precision))
+    print('F1-score: {:.3f}'.format(f1_score))
+    
+def GBT_feature_importances(GBT_model, features):
     """Get feature importances for features used in the model."""
+    
+    # Yield each feature and its feature importance score
     for i in range(len(features)):
-        yield("{}: {}".format(features[i],round(GBT_model.bestModel.featureImportances[i],3)))
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC Using the model as defined above, our results are as follows...
+        yield("{}: {}".format(features[i],round(GBT_model.featureImportances[i],3)))
 
 # COMMAND ----------
 
@@ -1352,9 +1456,9 @@ def feature_importances(GBT_model, features):
 # COMMAND ----------
 
 # MAGIC %md #### Toy Example
-# MAGIC We have selected Random Forest (RF) as the final model based on results from the above exploritory algorithm analysis. We will demonstrate a decision tree classifier using a toy example with 3 features from the flight delay training data and continue with an explaination of the RF algorithm.  
+# MAGIC We have selected Random Forest (RF) as the final model based on results from the above exploritory algorithm analysis. While GBT and RF produced similar performance in our exploration, RF has the advantage of interpretability. The algorithm and math behind RF can be explained beginning with a simple decision tree. We will demonstrate a decision tree classifier using a toy example with 3 features from the flight delay training data and continue with an explanation of the additions/modifications for the RF algorithm.  
 # MAGIC 
-# MAGIC First we separate 20% of the training data that the toy model will use to make predictions. Then we select 3 features from the dataset to visualize the trees that RF will build. The features we select are: whether the previous flight on the aircraft was delayed (feature 0), average delay at the origin airport 3 hours prior (feature 1), and hour of day of scheduled departure (feature 2).
+# MAGIC First we separate 20% of the training data that the toy model will use to make predictions. Then we select 3 important features from the dataset to visualize the trees that RF will build. The features we select are: whether the previous flight on the aircraft was delayed (feature 0), average delay at the origin airport 3 hours prior (feature 1), and hour of day of scheduled departure (feature 2).
 
 # COMMAND ----------
 
@@ -1365,17 +1469,17 @@ test_toy = spark.read.option("header", "true").parquet(test_toy_output_path)
 
 # MAGIC %md ##### Training Decision Trees   
 # MAGIC 
-# MAGIC Next we will train a decision tree. Each tree is constructed with a series of splitting rules. The example figure below builds one tree with 3 available features. The first node at the top of the tree is split based on whether the previous flight is delayed. From the right branch the next split is on scheduled departure hour of day. The tree increases depth by choosing the best split considering all features and split points. These splits divide the training examples into 7 regions, at the leaf nodes, based on the combination of their features. 
+# MAGIC Next we will train a decision tree. Each tree is constructed with a series of splitting rules. The example figure below builds one tree with 3 available features. The first node at the top of the tree, which shows the strongest feature, is split based on whether the previous flight is delayed. From the right branch the next split is on average delay at the origin airport. Hour of day of scheduled departure is used for the next 2 splits and finally average delay at origin airport is chosen again. The tree increases depth by choosing the best split considering all features and split points. These splits divide the training examples into 6 regions, at the leaf nodes, based on the combination of their features. 
 # MAGIC 
 # MAGIC How does the model decide splits? Our classification tree splits at the point which minimizes the *gini index*, a measure of node purity. The equation for the gini index is shown below, where \\(\hat{p}\_{mk}\\) is the proportion of examples in region \\(m\\) of class \\(k\\). 
 # MAGIC 
 # MAGIC $$ G = \sum\_{k=1}^{K} {\hat{p}\_{mk} (1 - \hat{p}\_{mk})} $$
 # MAGIC 
-# MAGIC The gini index will be minimized when \\(\hat{p}\_{m, k=0}\\) and \\(\hat{p}\_{m, k=1}\\) are close to 0 or 1, or when almost all the flight examples in the region are classified as either delayed or not delayed. 
+# MAGIC The gini index will be minimized when we are clearly classifying flights in each region. Looking at the formula above, the gini index will be small when either \\(\hat{p}\_{m, k=0}\\) or \\(\hat{p}\_{m, k=1}\\) are close to 0 or 1. This increases node purity and our certainty that a test example that lands in this region will be classified correctly as delayed or not delayed.
 
 # COMMAND ----------
 
-# Simple decision tree model
+# Train simple decision tree model
 dt = DT(labelCol="label", featuresCol="features")
 DT_model = dt.fit(train_toy)
 
@@ -1387,53 +1491,44 @@ display(DT_model)
 # MAGIC %md ##### Make Predictions
 # MAGIC To make a prediction using the decision tree, we assign a test data point to the leaf node (region) of the tree to which it belongs based on its features. The predicted class for a test example in region \\(m\\) is \\(argmax\_k\\) \\(\hat{p}\_{mk}\\), or the majority class.  
 # MAGIC 
-# MAGIC Below is an example of a prediction on a test example. For this example, the previous flight for the aircraft was delayed (feature 0 = 1) which moves down the left branch from the top of the tree. This flight's departure time is in hour 4, which moves it down the right branch of the next node. Next, the average delay at the origin airport 3 hours before is 1.09 minutes, which is less than the split point at 15.5 minutes. Lastly, repeating the hour of day feature for a split increases node purity and this flight is predicted to be delayed.
+# MAGIC Below is an example of a prediction on a "test" example. For this example, the previous flight for the aircraft was delayed (feature 0 = 1) which moves down the right branch from the top of the tree. Next, this flight's average delay at the origin airport 3 hours before is 0.75 minutes, which is less than the split point at 1.46 minutes. The departure time is in hour 14, which moves it down the right branch of the next two nodes. Lastly, examples with an average delay at the origin airport less than 0.87 are placed down the left branch and this flight is predicted not to be delayed. Repeating these features increases node purity.  
+# MAGIC 
+# MAGIC The following code was used to predict on the "test" set and select this example.
 
 # COMMAND ----------
 
-# Add row number to compare predictions for the same test example
-test_toy = test_toy.withColumn("row", f.monotonically_increasing_id())
+def toy_predict_DT(test_toy):
+    '''Predict on toy test set with decision tree model and show specific example.'''
+    
+    # Add row number to compare predictions for a specific test example
+    test_toy = test_toy.withColumn("row", f.monotonically_increasing_id())
+    
+    # Predict on toy test set
+    pred_toy_DT = DT_model.transform(test_toy)
+
+    # Create dataframe with predictions
+    labelAndPrediction = pred_toy_DT.select("label", "row", "prediction", "features")
+    
+    return labelAndPrediction.where(f.col("row") == 13723)
 
 # COMMAND ----------
 
-# Predict on toy test set
-pred_toy_DT = DT_model.transform(test_toy)
-
-# Create dataframe with predictions and show example
-labelAndPrediction = pred_toy_DT.select("label", "row", "prediction", "features")
-display(labelAndPrediction.where(labelAndPrediction.row == 25769841559))
-
-# COMMAND ----------
-
-def evaluate_toy(labelAndPrediction):
-    misclassified = labelAndPrediction.where(labelAndPrediction.label != labelAndPrediction.prediction).count()
-    misclassified_percent = misclassified/labelAndPrediction.count()
-    print('Accuracy: {:.3f}'.format(1-misclassified_percent))
-
-    # precision, recall
-    TP = labelAndPrediction.where((labelAndPrediction.label == 1) & (labelAndPrediction.prediction == 1)).count()
-    FP = labelAndPrediction.where((labelAndPrediction.label == 0) & (labelAndPrediction.prediction == 1)).count()
-    TN = labelAndPrediction.where((labelAndPrediction.label == 0) & (labelAndPrediction.prediction == 0)).count()
-    FN = labelAndPrediction.where((labelAndPrediction.label == 1) & (labelAndPrediction.prediction == 0)).count()
-
-    print('Recall: {:.3f}'.format(TP/(TP + FN)))
-    print('Precision: {:.3f}'.format(TP/(TP + FP)))
-
-# COMMAND ----------
-
-evaluate_toy(labelAndPrediction)
+# display example features and prediction
+display(spark.read.option("header", "true").parquet(toy_predict_DT_path))
 
 # COMMAND ----------
 
 # MAGIC %md ##### RF Algorithm
-# MAGIC The method of averaging many trees grown from repeated samples of the training data, or bagging, decreases variance of the model that would occur with any one tree. Bagging grows deep trees and does not prune. The RF training method goes a step further to help guarantee a more reliable result. RF trees are built such that each node is randomly assigned a subset of features that will be considered as possible split candidates. This means that the trees will differ from each other, which when averaged will decrease variance more than bagging alone. *This is significant for our model, since our exploratory analysis showed one dominant feature. Instead of creating trees that are highly correlated using this feature, RF will randomly select features to consider.*  
+# MAGIC The method of averaging many trees grown from repeated samples of the training data, or bagging, decreases variance of the model that would occur with any one tree. Bagging grows deep trees and does not prune. The RF training method goes a step further to help guarantee a more reliable result. RF trees are built such that each node is randomly assigned a subset of features that will be considered as possible split candidates. This means that the trees will differ from each other, which when averaged will decrease variance more than bagging alone. *This is significant for our model, since our exploratory analysis showed one dominant feature. Instead of creating trees with bagging that are highly correlated using this feature, RF will randomly select features to consider.*  
 # MAGIC 
-# MAGIC Below we will train a RF model on the same data using 10 trees.
+# MAGIC In the case of the toy example, RF is only able to consider 1 feature (square root of 3, rounded down) at each node instead of all features, so we do not expect this to perform better than a single tree. However, because we have many features in our full implementation of the model, we expect RF will have the best performance as we add more and more features. 
+# MAGIC 
+# MAGIC Below is the code used to train RF model on the same data using 3 trees and the logic associated with each tree:
 
 # COMMAND ----------
 
-# RF model
-rf = RF(labelCol="label", featuresCol="features", numTrees=10)
+# Fit RF model
+rf = RF(labelCol="label", featuresCol="features", numTrees=3)
 RF_model = rf.fit(train_toy)
 
 # COMMAND ----------
@@ -1446,34 +1541,25 @@ print(RF_model.toDebugString)
 # MAGIC %md ##### Prediction with RF
 # MAGIC RF then combines these predictions for all trees using a majority vote. If \\(\hat{p}\_{n,k}\\) is the proportion of predictions for class \\(k\\) over \\(n\\) trees, the majority vote is \\(argmax\_k\\) \\(\hat{p}\_{n,k}\\).  
 # MAGIC 
-# MAGIC The above test example has the following features: previous flight delayed, average delay at origin airport is 1.09 minutes, scheduled hour of departure delay is 4:00am. In the simple unpruned decision tree model, the prediction for this example was a delay. For the RF model, we can follow the above tree logic to classify the same test data point. For example, tree 0 will score this example as no delay. The ensemble of 10 trees also predicts no delay with a majority vote. This demonstrates the difference in prediction using RF with an ensemble of trees and random feature selection.
+# MAGIC We will return to the above test example, which has the following features: previous flight delayed, average delay at origin airport is 0.75 minutes, scheduled hour of departure delay is 14. In the simple unpruned decision tree model, the prediction for this example was no delay. For the RF model, we can follow the above tree logic to classify the same test data point. The ensemble of 3 trees predicts a delay with a majority vote. This demonstrates the difference in prediction using RF with an ensemble of trees and random feature selection.
 
 # COMMAND ----------
 
-# Predict on toy test set with RF
-pred_toy_RF = RF_model.transform(test_toy)
+def toy_predict_RF(test_toy):
+    '''Predict on toy test set with random forest model and show specific example.'''
+    
+    # Predict on toy test set with RF
+    pred_toy_RF = RF_model.transform(test_toy)
 
-# Create dataframe with predictions and show example
-labelAndPrediction_RF = pred_toy_RF.select("label", "row", "prediction", "features")
-display(labelAndPrediction_RF.where(labelAndPrediction_RF.row == 25769841559))
-
-# COMMAND ----------
-
-evaluate_toy(labelAndPrediction_RF)
-
-# COMMAND ----------
-
-# MAGIC %md REMOVE CELLS BELOW
+    # Create dataframe with predictions
+    labelAndPrediction_RF = pred_toy_RF.select("label", "row", "prediction", "features")
+    
+    return labelAndPrediction_RF.where(f.col("row") == 13723)
 
 # COMMAND ----------
 
-labelAndPrediction_RF_join = labelAndPrediction_RF.withColumnRenamed("prediction", "prediction_RF").select("prediction_RF", "row")
-labelAndPrediction_join = labelAndPrediction_RF_join.join(labelAndPrediction, "row", "inner")
-display(labelAndPrediction_join.sample(False, 0.0001))
-
-# COMMAND ----------
-
-display(labelAndPrediction_join.where((f.col("label") == f.col("prediction_RF")) & (f.col("label") != f.col("prediction"))))
+# display the same example as DT - features and prediction
+display(spark.read.option("header", "true").parquet(toy_predict_RF_path))
 
 # COMMAND ----------
 
@@ -1482,23 +1568,260 @@ display(labelAndPrediction_join.where((f.col("label") == f.col("prediction_RF"))
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC 
+# MAGIC ##### Undersampling
+
+# COMMAND ----------
+
+# MAGIC %md 
+# MAGIC Due to the imbalanced nature of the outcome variables `dep_del15`, we use undersampling to even out the ratio between delays and non-delays in our train set. We choose undersampling as opposed to oversampling to minimize burden on our compute resources.
+
+# COMMAND ----------
+
+def Undersampling(train_set, ratio = 4):
+  '''Undersampling is performed to account for the discrepancy in frequency between our positive and negative
+  classes. Takes train data set and ratio of major to minor class and returns undersampled dataframe'''
+  
+  major_df = train_set.filter(col("label") == 0)
+  minor_df = train_set.filter(col("label") == 1)
+  
+  sampled_majority_df = major_df.sample(False, 1/ratio)
+  train_set_undersampled = sampled_majority_df.unionAll(minor_df)
+  
+  return train_set_undersampled
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC 
+# MAGIC ##### Features
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC The following features were used in the final model, combining the most relevant features across our two datasets and our engineered features. These features were assembled into a vector through the same method demonstrated demonstrated above on GBT.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC <img src ='https://github.com/RLashofRegas/mids-w261-final/blob/main/notebooks/Features_Final.png?raw=true'>
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC 
+# MAGIC ##### Model training, parameter testing and scoring
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC The pipeline below was used to train our model on a set of specified parameters, predict on a validation/test set and produce evaluation metrics. We chose this method as opposed to cross validation due to resource restrictions. Results returned to a pandas dataframe which we saved to parquet for the purposes of this report.
+
+# COMMAND ----------
+
+def FitRFModel(train_set, numTrees = 20, maxDepth = 5, maxBins = 400):
+  '''Takes train data and parameters for rf and returns fitted RF model.'''
+ 
+  #Define rf model
+  rf = RF(labelCol='label', featuresCol='features', 
+        numTrees = numTrees, 
+        maxDepth = maxDepth,
+        maxBins = maxBins)
+  #Fit rf model
+  RF_model = rf.fit(train_set)
+  
+  return RF_model
+  
+def PredictandEvaluateModel (RF_model, test_set):
+  '''Takes fitted RF model and uses to make predictions on test or validation set.
+  Prints Evaluation metrics and a confusion matrix and returns evaluation metrics'''
+  
+  predictions = RF_model.transform(test_set)
+  scoreAndLabels = predictions.select("prediction", "label")  
+  scoreAndLabelsPandas = scoreAndLabels.toPandas()
+  
+  true_positive = scoreAndLabelsPandas[(scoreAndLabelsPandas.label == 1) & (scoreAndLabelsPandas.prediction == 1) ]['label'].count()
+  true_negative = scoreAndLabelsPandas[(scoreAndLabelsPandas.label == 0) & (scoreAndLabelsPandas.prediction == 0)]['label'].count()
+  false_positive = scoreAndLabelsPandas[(scoreAndLabelsPandas.label == 0) & (scoreAndLabelsPandas.prediction == 1)]['prediction'].count()
+  false_negative = scoreAndLabelsPandas[(scoreAndLabelsPandas.label == 1) & (scoreAndLabelsPandas.prediction == 0)]['label'].count()
+  accuracy = (true_positive + true_negative)/ (true_positive + true_negative + false_positive + false_negative)
+
+  precision = true_positive / (false_positive + true_positive)
+  recall = true_positive / (false_negative + true_positive)
+  f1 = (2 * precision * recall)/ (precision + recall)
+
+  return scoreAndLabelsPandas, precision, recall, f1, accuracy
+  
+  
+def CreateConfusion(scoreandLabels):
+  '''Takes score and labels pandas df with columns "label" and "prediction"
+  and returns seaborn confusion matrix'''
+  
+  confusion_matrix = pd.crosstab(scoreandLabels['label'], 
+                                 scoreandLabels['prediction'], 
+                                 rownames=['Actual'], 
+                                 colnames=['Predicted'])
+  
+  comma_fmt = FuncFormatter(lambda x, p: format(int(x), ','))
+  ax = sns.heatmap(confusion_matrix, annot=True,cmap='Blues', fmt = 'd',
+                             cbar_kws={'label': 'Count','format':comma_fmt})
+  for t in ax.texts:
+    t.set_text('{:,d}'.format(int(t.get_text())))
+  plt.show()
+  
+def plotRFperformance(summary_table, Param, title):
+    '''Takes summary table and plots specified Param vs F1 Score'''
+    fig, ax = plt.subplots(1,1,figsize = (12,6))
+    
+    
+    x = summary_table[Param]
+    f1_score = summary_table['F_Score']
+    precision = summary_table['Precision']
+    recall = summary_table['Recall']
+    accuracy = summary_table['Accuracy']
+    
+    ax.plot(x, f1_score, 'k--', label='F1', color = 'tab:green')
+    ax.plot(x, precision, 'r--', label='Precision', color = 'tab:orange')
+    ax.plot(x, recall, 'r--', label='Recall', color = 'tab:blue')
+    ax.plot(x, accuracy, 'r--', label='Accuracy', color = 'tab:red')
+    ax.legend(loc='upper right', fontsize='x-large')
+    plt.xlabel(Param)
+    plt.ylabel('Score')
+    if title:
+        plt.title(title)
+    display(plt.show())
+  
+def RFmodelPipeline(train_set, test_set, numTreeList, maxDepthList, maxBins = 400):
+  '''Takes train and test set along with lists of number of trees and max depth
+  to run iterative RF models on. Fits model on train, Predicts on test and prints 
+  evaluation metrics and visualizations.'''
+  
+  summary_table = pd.DataFrame({'Model Number': [], 'NumTrees': [], 'MaxDepth':[], 
+                'Precision' : [], 'Recall' : [], 'F1 Score': [], 'Accuracy': []}).set_index('Model Number')
+  
+  model_number = 1
+  
+  for numTrees, maxDepth in zip(numTreeList, maxDepthList):
+    
+    RF_model = FitRFModel(train_set, numTrees = numTrees, maxDepth = maxDepth)
+    
+    scoreandLabels, precision, recall, f1, accuracy = PredictandEvaluateModel (RF_model, test_set)
+    
+    summary_table.loc[model_number] = [numTrees,
+                                      maxDepth,
+                                      precision,
+                                      recall,
+                                      f1,
+                                      accuracy]
+    
+    model_number += 1
+    
+  return summary_table, scoreandLabels
+
+# COMMAND ----------
+
+summary_table = spark.read.option("header", "true").parquet(summary_table_path)
+summary_table = summary_table.toPandas()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### HyperParameter Testing on Validation Set
+# MAGIC While large scale hyperparameter testing was not available to us due to resource constraints, we were able to test the effect of adjusting both the number of trees and max depth of trees (while holding other parameters constant) on our validation data. 
+# MAGIC 
+# MAGIC Increasing the number of trees in the model provides an initial improvement in precision (although a single decision tree provides surprisingly strong predictive ability, discussed more later). This effect levels off after 10 trees, however.
+# MAGIC 
+# MAGIC Increasing the maximum depth of trees in the random forest provides more consistent linear improvement in the model. This is intuitive since the large size of the data and dimensionality can reasonably accomodate highly complex trees to provide quality splits at the decision nodes. We do start to see evidence of overfitting at depth 20, however, as performance begins to show a decline. It is reasonable to assume that this decline may be due to the relatively low number of trees (10) in the random forest. Ideally we could test performance on highly complex trees while increasing the number of trees, however, this is not possible given the resources and scope of this project. For our final model we strike a balance between performance and resource management by running a random forest with 30 trees at a maximum depth of 15.
+
+# COMMAND ----------
+
+plotRFperformance(summary_table.iloc[4:11].sort_values(by='NumTrees'), 'NumTrees', title = 'Performance vs Num Trees (MaxDepth = 5)')
+
+# COMMAND ----------
+
+plotRFperformance(summary_table.iloc[11:15].sort_values(by='MaxDepth'), 'MaxDepth', title = 'Performance vs MaxDepth (NumTrees = 10)')
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Conclusions
+
+# COMMAND ----------
+
+scoreandLabels = spark.read.option("header", "true").parquet(scoreandLabels_path)
+scoreandLabels = scoreandLabels.toPandas()
+
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Based on our hyperparamter testing, we run a final random forest model on our test set with 30 trees at a maximum depth at 15 levels for each tree. Our model acheived an F1 Score of .51 on the test data with precision of .47, recall of .57 and accuracy of .8. The entire end to end model from training to evaluation ran in 41 minutes.
+
+# COMMAND ----------
+
+CreateConfusion(scoreandLabels)
+
+# COMMAND ----------
+
+# MAGIC %md Results:
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC <img src ='https://github.com/RLashofRegas/mids-w261-final/blob/main/notebooks/Final_Mod_Results.png?raw=true'>
+
+# COMMAND ----------
+
+# MAGIC %md 
 # MAGIC 
-# MAGIC Our model acheived an F1 Score of _ on the test data with precision of _ and recall of _. 
+# MAGIC We chose to optimize our model for recall given the nature of the business problem while maintaining reasonable accuracy as well. As seen in the confusion matrix, our focus on recall resulted in a sacrifice in precision. In terms of the original problem statement, when there is indeed a delayed flight, our model predicts that delay accurately 58% of the time. However, when our model predicts a delay, there is still a 55% chance that flight will not in fact be delayed. 
 # MAGIC 
-# MAGIC While these results are not competitive with state of the art classification models in the field, it is a reasonably effective predictive model given the complexity of the problem. We propose several enhancements that could be made to improve our model:
+# MAGIC The top ten most important features as determined by our model are shown below:
 # MAGIC 
-# MAGIC * **Data collection from additional sources**: Returning to breakdown of causes of delays from the Belcastro paper, we see that a large portion of flight delays are causes that are not fully represented in our dataset, such as maintenance issues, aircraft cleaning, baggage looading, fueling and air traffic control issues. While we attempted to proxy for these variables through engineeered aggregate airline and airport features, the scope of the data did not fully allow us to account for all for all of them. Future work could bring in more detailed data from airports and airlines to address these important features.
-# MAGIC * **Further feature engineering of regarding consecutive flights**: The most important feature in our model for determining whether a flight would be delayed was whether the previous flight on the same aircraft was delayed. In future work, we would like to explore this features further, perhaps adding additional engineeered features to as interaction terms such as the time between the previously delayed flight and the current flight. Additional data could also play an important role here. For example, presumably it would be important to know the cause of the delay of the previous flight, given that cause was known at least 2 hours before the current flight we are trying to predict for.
+# MAGIC ###### Top Ten Features
+# MAGIC <img src ='https://github.com/RLashofRegas/mids-w261-final/blob/main/notebooks/Feat_Importance.png?raw=true'>
+# MAGIC 
+# MAGIC Clearly, whether our not the previous flight on the same aircraft was the predominant feature in the model. While we expected this feature to provide a large amount of predictive power, we were surprised by the magnitude of its effect. Interestingly, none of the weather features are present in the top ten features. 
+# MAGIC 
+# MAGIC The train time of our model is reasonable given the use case- it is unlikely that there would be much need for consistent re-training on real-time data. If a lighter weight model was needed, however, a single decision tree provided strong predictive power as well. This is likely due to the strength of our predominant feature, `PREVIOUS_FLIGHT_DELAYED_FOR_MODELS`. If a quick training, highly interpretable model was needed, a decision tree would be a great option.
+# MAGIC 
+# MAGIC We produced an effective predictive model given the complexity of the problem, however this model is not competitive with state of the art classification models in the field. We propose several enhancements that could be made to improve our model:
+# MAGIC 
+# MAGIC * **Data collection from additional sources**: Returning to breakdown of causes of delays from the Belcastro paper, we see that a large portion of flight delays are causes that are not fully represented in our dataset, such as maintenance issues, aircraft details, aircraft cleaning, baggage loading, fueling and air traffic control issues. While we attempted to proxy for these variables through engineered aggregate airline and airport features, the scope of the data did not fully allow us to account for all for all of them. Future work could bring in more detailed data from airports and airlines to address these important features.
+# MAGIC * **Further feature engineering of regarding consecutive flights**: The most important feature in our model for determining whether a flight would be delayed was whether the previous flight on the same aircraft was delayed. In future work, we would like to explore this features further, perhaps adding additional engineered features to act as interaction terms such as the time between the previously delayed flight and the current flight. Additional data could also play an important role here. For example, presumably it would be important to know the cause of the delay of the previous flight, given that cause was known at least 2 hours before the current flight we are trying to predict for.
+# MAGIC * **Different models**: We believe future work on this problem would benefit from exploring additional statistical learning models. Some potential models to explore are cutting edge boosting models such as XG Boost and neural networks. XG boost is a good candidate to implement, given the moderate success we saw with ensemble models and the performance optimizations implemented into the algorithm that could allow for reasonable run-times on this size of data. Neural networks are an interesting candidate for future study on this problem given the non-linearity of the problem and complex decision boundaries. A recurrent neural network would be a compelling model to implement due to the time series nature of this data. We view any model exploration as secondary to the two areas above in terms of optimizing performance, as further data collection and feature engineering would almost certainly provide a greater return on investment.
 # MAGIC * **Enhanced domain knowledge**: Our team came into this project with limited background knowledge about the airline industry or weather forecasting. While we have come up to speed quickly on these topics during our time on this project through investigating the data and background material, further research and understanding about the domain would certainly be helpful, especially given the arcane coding of the weather data. Some useful excercises towards this goal would be to interview a subject matter expert in the airline industry or to take a course on climate science.
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## Course Concepts
+# MAGIC ### Spark, Parellel Frameworks and Working at Scale
+# MAGIC   
+# MAGIC We were able to accomplish training and testing over tens of millions of records thanks to Spark and its parallel computing framework. Spark borrows many principles behind the functional programming paradigm to enable efficiency on large data sets. Below are some of the big data methodologies that allowed us to accomplish this project at scale.
+# MAGIC   
+# MAGIC ##### Higher order functions
+# MAGIC Where possible we leveraged Spark's built in functions such as filter and aggregate. When build in functions were not available to serve our needs, we used udf's applied as lambda functions in parallel on the data. 
+# MAGIC   
+# MAGIC ##### High-level of Abstraction 
+# MAGIC Working at the Spark Dataframe level was the correct level of absraction for us in this project. It allowed for a quick workflow and pipeline build without concerning ourselves with low-level optimizations. This saved us time and energy and was important for allowing us to finish this project in a reasonable amount of time. In future work, however, it would likely be necessary to make lower level optimizations when our model was moved into deployment and production.
+# MAGIC   
+# MAGIC ##### Resource Management
+# MAGIC We made several key decisions in our model implementation to work effectively within our resources. When balancing out classes, we chose to undersample instead of oversample. This limited the number of records for our model to train on. Additionally, based on our analysis, implementing a slightly limited complexity model (random forest with 30 trees at 15 max depth) provided the best balance of resource management and performance. 
+# MAGIC   
+# MAGIC ##### Parquet Storage
+# MAGIC Storing our data in parquet allowed for rapid aggregations due to Parquet's columnar storage nature. Parquet's efficient compression and querying abilities were ideal for working with our large datasets in this project. Given the longer run-times and ineffiency of row based storage such as csv, this was the clear option for this project.
+# MAGIC   
+# MAGIC ##### Parallel Models  
+# MAGIC Both our intial logistic regression model and our final random forest model were implemented in parallel through Spark ML. This allowed us to build models on our large dataset. Here we will consider the implementation of the random forest and how it was performed on our data.
+# MAGIC 
+# MAGIC At the level of each tree, the implementation in Spark is similar to the Planet algorithm designed by Panda et al. Spark builds trees one level at a time. The data is partitioned across mappers and each mapper considers a number of possible split points for its subset of the data. Each mapper determines parital statistics and passes to the reducer where split points are determined based on aggregate statistics, thus growing each tree one level at a time. In a random forest, each tree can also be grown in parallel because, unlike with gradient boosted trees, each tree in a random forest is grown with a random subset of features, independent of others.
+# MAGIC 
 # MAGIC ### Data Modeling Pipeline
 # MAGIC 
 # MAGIC In working through this project, we worked systematically to create a data modeling pipeline to address the business problem of airline flight delay prediction. To accomplish this, we relied on the data modeling framework of analyzing and understanding the domain and requirements, ingestion of data (including provided and external sources), exploratory data analysis, feature engineering and model building. While the foundation of this framework was sequential, with one step generally leading to the next, we often had to return to previous steps in the pipeline to optimize our model. For example, after running our classification model and identifying gaps in our prediction space, we returned to the feature engineering step to build features that would provide more relevant signal for our model to use in its predictions.
+# MAGIC 
+# MAGIC This workflow and implementation was crucial to our ability to perform this project. Due to the long run-times involved with processing and modeling on such a large dataset, an integrated pipeline that could be run end to end was highly necessary for us to be able to perform our analysis within the time constraints of this project.
 # MAGIC 
 # MAGIC The scope of this project was limited to model building. In future work, however, we could implement lab-based experiments to determine if our results are robust to greater scrutiny. And finally, we could deploy our model into a production environment with fault-tolerant infrastructure capable of ingestion for real-time predictions.
 # MAGIC 
@@ -1506,26 +1829,7 @@ display(labelAndPrediction_join.where((f.col("label") == f.col("prediction_RF"))
 # MAGIC 
 # MAGIC The bias-variance trade off describes the conflict between the two major sources of error in supervised machine learning that prevents algorithms from generalizing to unseen data. The error resulting from bias refers to error resulting from inadequete accounting of relevant relations between the input and output variables, also called underfitting, while the variance refers to error from over accounting of relations between input and output, also called overfitting.
 # MAGIC    
-# MAGIC Since we were working heavily with our training data before a final evaluation on the test set, we took steps to mitigate the risk of overfitting. Firstly, we used k-fold cross validation to help detect signs that we were overfitting as we optimized our model. Secondly, we adjusted the hyperparameters of our random forest model to avoid overfitting. By keeping a minimum tree depth, we limited the complexity of our models and discouraged it from modeling random noise in the training data. And by increasing the number of trees in the random forest, we increased the population of decision trees with low correlation to each other.
-# MAGIC 
-# MAGIC ### Spark and Parellel Frameworks
-# MAGIC   
-# MAGIC We were able to accomplish training and testing over tens of millions of records thanks to Spark and its parallel computing framework. Spark borrows many principles behind the functional programming paradigm to enable efficiency on large data sets. Below are some of the big data methodologies that allowed us to accomplish this project at scale.
-# MAGIC   
-# MAGIC ##### Higher order functions
-# MAGIC Where possible we leveraged Spark's built in functions such as filter and aggregate. When build in functions were not available to serve our needs, we used udf's applied as lambda functions in parallel on the data.
-# MAGIC   
-# MAGIC ##### High-level of Abstraction 
-# MAGIC Working at the Spark Dataframe level was the correct level of absraction for us in this project. It allowed for a quick workflow and pipeline build without concerning ourselves with low-level optimizations. In future work, however, it would likely be necessary to make lower level optimizations when our model was moved into deployment and production.
-# MAGIC   
-# MAGIC ##### Parquet Storage
-# MAGIC Storing our data in parquet allowed for rapid aggregations due to Parquet's columnar storage nature. Parquet's efficient compression and querying abilities were ideal for working with our large datasets in this project.
-# MAGIC   
-# MAGIC   
-# MAGIC ##### Parallel Models  
-# MAGIC Both our intial logistic regression model and our final random forest model were implemented in parallel through Spark ML. This allowed us to build models on our large dataset. Here we will consider the implementation of the random forest and how it was performed on our data.
-# MAGIC 
-# MAGIC At the level of each tree, the implementation in Spark is similar to the Planet algorithm designed by Panda et al. Spark builds trees one level at a time. The data is partitioned across mappers and each mapper considers a number of possible split points for its subset of the data. Each mapper determines parital statistics and passes to the reducer where split points are determined based on aggregate statistics, thus growing each tree one level at a time. In a random forest, each tree can also be grown in parallel because, unlike with gradient boosted trees, each tree in a random forest is grown with a random subset of features, independent of others.
+# MAGIC Since we were working heavily with our training data before a final evaluation on the test set, we took steps to mitigate the risk of overfitting. Firstly, we used k-fold cross validation to help detect signs that we were overfitting as we optimized our model (as resources allowed). Secondly, we adjusted the hyperparameters of our random forest model to avoid overfitting. By keeping a minimum tree depth, we limited the complexity of our models and discouraged it from modeling random noise in the training data. And by increasing the number of trees in the random forest, we increased the population of decision trees with low correlation to each other.
 
 # COMMAND ----------
 
@@ -1538,6 +1842,4 @@ display(labelAndPrediction_join.where((f.col("label") == f.col("prediction_RF"))
 # MAGIC 5. https://timezonedb.com/api
 # MAGIC 6. http://dss.ucar.edu/datasets/ds353.4/inventories/station-list.html
 # MAGIC 7. https://www.ncei.noaa.gov/data/global-hourly/doc/isd-format-document.pdf
-
-# COMMAND ----------
-
+# MAGIC 8. http://www.datawrangling.org/how-flightcaster-squeezes-predictions-from-flight-data/
