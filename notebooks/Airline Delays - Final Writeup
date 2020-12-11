@@ -577,7 +577,7 @@ airlines = sqlContext.sql("SELECT * FROM airlines").cache()
 # MAGIC 
 # MAGIC For the weather dataset we first needed to determine a method for joining to the airlines dataset. After this we perform some data parsing to separate out the weather fields that contain multiple data elements into individual features.
 # MAGIC 
-# MAGIC For the join to the airlines dataset we determined that, in cases where a weather station resides at an airport, the `call_sign` field refers to the FAA location identifier [6]. This is equivalent to the `origin` or `dest` (from the airlines dataset) but with a leading "K". Assuming that all airports have a weather station associated with them these fields can be used to join the two datasets together. As seen below, we determined that 43 airports did not have a weather station associated with their location code. However, this only accounts for 4.5% of the total flights. We deemed this an acceptable loss for this initial study due to the overall quality of the weather data from stations associated with airports - they exhibited **XX%** missing data for any of our selected weather features as opposed to about 4% missing over all weather stations. Additionally, the percentage of delayed flights for airports with weather stations is not significantly different than the percentage of delayed flights without a weather station. If we were to expand on this research we would come back to this loss and join the remaining airports to stations using the latitude and longitude. The following method creates the `airport_code` from the weather dataset:
+# MAGIC For the join to the airlines dataset we determined that, in cases where a weather station resides at an airport, the `call_sign` field refers to the FAA location identifier [6]. This is equivalent to the `origin` or `dest` (from the airlines dataset) but with a leading "K". Assuming that all airports have a weather station associated with them these fields can be used to join the two datasets together. As seen below, we determined that 43 airports did not have a weather station associated with their location code. However, this only accounts for 4.5% of the total flights. We deemed this an acceptable loss for this initial study due to the overall quality of the weather data from stations associated with airports - they exhibited only 4% missing data for any of our selected weather features. Additionally, the percentage of delayed flights for airports with weather stations is not significantly different than the percentage of delayed flights without a weather station. If we were to expand on this research we would come back to this loss and join the remaining airports to stations using the latitude and longitude. The following method creates the `airport_code` from the weather dataset:
 
 # COMMAND ----------
 
@@ -810,7 +810,7 @@ weather = rain_dimension_parse(weather)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC In our <a href="https://github.com/RLashofRegas/mids-w261-final/blob/main/notebooks/Airline%20Delays%20-%20Data%20Processing%20Pipeline.py">full data pipeline</a> the above is saved into the files that are read in at the beginning of the next section.
+# MAGIC In our <a href="https://dbc-c4580dc0-018b.cloud.databricks.com/?o=8229810859276230#notebook/2834511320030905/command/2834511320031004">full data pipeline</a> the above is saved into the files that are read in at the beginning of the next section.
 
 # COMMAND ----------
 
