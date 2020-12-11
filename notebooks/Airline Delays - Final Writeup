@@ -1677,12 +1677,17 @@ def PredictandEvaluateModel (RF_model, test_set):
 def CreateConfusion(scoreandLabels):
   '''Takes score and labels pandas df with columns "label" and "prediction"
   and returns seaborn confusion matrix'''
+  
   confusion_matrix = pd.crosstab(scoreandLabels['label'], 
                                  scoreandLabels['prediction'], 
                                  rownames=['Actual'], 
                                  colnames=['Predicted'])
-  sns.heatmap(confusion_matrix, annot=True,cmap='Blues', fmt='g')
-
+  
+  comma_fmt = FuncFormatter(lambda x, p: format(int(x), ','))
+  ax = sns.heatmap(confusion_matrix, annot=True,cmap='Blues', fmt = 'd',
+                             cbar_kws={'label': 'Count','format':comma_fmt})
+  for t in ax.texts:
+    t.set_text('{:,d}'.format(int(t.get_text())))
   plt.show()
   
 def RocCurve(predictions_Pandas):
