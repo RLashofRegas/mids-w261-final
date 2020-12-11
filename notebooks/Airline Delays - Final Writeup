@@ -49,6 +49,9 @@ from pyspark.ml.linalg import Vectors
 from pyspark.ml.stat import Correlation
 from pyspark.ml.classification import RandomForestClassifier as RF, DecisionTreeClassifier as DT
 from pyspark.ml import Pipeline
+from sklearn import metrics
+from sklearn.metrics import roc_curve
+from sklearn.metrics import precision_recall_curve
 
 #Numpy and pandas
 import numpy as np
@@ -100,6 +103,7 @@ toy_RF_logic_path = "dbfs:/mnt/mids-w261/group_5/training_data_output/toy_RF_log
 #Evaluation files
 summary_table_path = final_project_path + 'summary_table.parquet'
 scoreandLabels_path = final_project_path + 'scoreandLabels.parquet'
+predictions_path = final_project_path + 'predictions.parquet'
 
 # COMMAND ----------
 
@@ -1257,7 +1261,7 @@ LEFT JOIN delays_by_carrier AS dco ON
 # MAGIC 
 # MAGIC When we ran our initial logistic regression model, we observed that the model always predicted that there was no delay due to the imbalance in the dataset with under 20% of flights being delayed. To account for the imbalance of the outcome variable we explored two options for the base model including a weight column that utilizes a balancing ratio and adjusting the threshold for the model to a value closer to the mix of delays to no delays. The threshold was slightly more effective at improving recall for our model than the weighted column so we utilitized the threshold in our base model which is shown below. As we increased the threshold from 0.18 to 0.5 we noticed a large drop in recall with an increase in accuracy, we found that a threshold below 0.2 had good balance of accuracy and recall.  
 # MAGIC 
-# MAGIC The most noticeable improvement in the model accuracy and recall came when we added the previous flight delay feature, which signaled to us that this feature may be very important to include in future models. Our base model had an accuracy and recall of 0.75 and 0.56 on both our training data and test data. In our next models we explore using a broader set of the features available as well as additional methods for handling the imbalance of the outcome variable in the dataset.  
+# MAGIC The most noticeable improvement in the model accuracy and recall came when we added the previous flight delay feature, which signaled to us that this feature may be very important to include in future models. Our base model had an accuracy and recall of 0.815 and 0.469 on our training data and .811 and .465 test data. In our next models we explore using a broader set of the features available as well as additional methods for handling the imbalance of the outcome variable in the dataset.  
 # MAGIC 
 # MAGIC The code below is what we used to train our logistic regression. We used 3-fold cross-validation for this model to train on different train/test splits and improve performance on the unseen test set. 
 
@@ -1291,7 +1295,7 @@ def train_logistic_regression(train_log):
   #Create parameter grid search 
   paramGrid = ParamGridBuilder() \
     .addGrid(lr.threshold, [.185]) \
-    .addGrid(lr.maxIter, [10,20]) \
+    .addGrid(lr.maxIter, [30,50]) \
     .addGrid(lr.regParam, [0.1]) \
     .build()
 
@@ -1638,7 +1642,7 @@ def FitRFModel(train_set, numTrees = 20, maxDepth = 5, maxBins = 400):
   '''Takes train data and parameters for rf and returns fitted RF model.'''
  
   #Define rf model
-  rf = RF(labelCol='label', featuresCol='features', 
+  rf = RF(labelCol='label', featuresCol='features2', 
         numTrees = numTrees, 
         maxDepth = maxDepth,
         maxBins = maxBins)
@@ -1652,8 +1656,10 @@ def PredictandEvaluateModel (RF_model, test_set):
   Prints Evaluation metrics and a confusion matrix and returns evaluation metrics'''
   
   predictions = RF_model.transform(test_set)
-  scoreAndLabels = predictions.select("prediction", "label")  
-  scoreAndLabelsPandas = scoreAndLabels.toPandas()
+  
+  #Convert to pandas for more comprehensive evaluation metrics
+  predictions_Pandas = predictions.select('label','probability', 'prediction').toPandas()
+  scoreAndLabelsPandas = predictions_pandas[["prediction", "label"]]  
   
   true_positive = scoreAndLabelsPandas[(scoreAndLabelsPandas.label == 1) & (scoreAndLabelsPandas.prediction == 1) ]['label'].count()
   true_negative = scoreAndLabelsPandas[(scoreAndLabelsPandas.label == 0) & (scoreAndLabelsPandas.prediction == 0)]['label'].count()
@@ -1665,23 +1671,54 @@ def PredictandEvaluateModel (RF_model, test_set):
   recall = true_positive / (false_negative + true_positive)
   f1 = (2 * precision * recall)/ (precision + recall)
 
-  return scoreAndLabelsPandas, precision, recall, f1, accuracy
+  return scoreAndLabelsPandas, predictions_Pandas, predictions, precision, recall, f1, accuracy
   
   
 def CreateConfusion(scoreandLabels):
   '''Takes score and labels pandas df with columns "label" and "prediction"
   and returns seaborn confusion matrix'''
-  
   confusion_matrix = pd.crosstab(scoreandLabels['label'], 
                                  scoreandLabels['prediction'], 
                                  rownames=['Actual'], 
                                  colnames=['Predicted'])
+  sns.heatmap(confusion_matrix, annot=True,cmap='Blues', fmt='g')
+
+  plt.show()
   
-  comma_fmt = FuncFormatter(lambda x, p: format(int(x), ','))
-  ax = sns.heatmap(confusion_matrix, annot=True,cmap='Blues', fmt = 'd',
-                             cbar_kws={'label': 'Count','format':comma_fmt})
-  for t in ax.texts:
-    t.set_text('{:,d}'.format(int(t.get_text())))
+def RocCurve(predictions_Pandas):
+
+  # calculate the fpr and tpr for all thresholds of the classification
+  probs = predictions_Pandas['probability'].str[1]
+  y_test = predictions_Pandas['label']
+
+  fpr, tpr, threshold = metrics.roc_curve(y_test, probs, pos_label=1)
+  roc_auc = metrics.auc(fpr, tpr)
+
+  #Plot
+  plt.title('Receiver Operating Characteristic')
+  plt.plot(fpr, tpr, 'b', label = 'AUC = %0.2f' % roc_auc)
+  plt.legend(loc = 'lower right')
+  plt.plot([0, 1], [0, 1],'r--')
+  plt.xlim([0, 1])
+  plt.ylim([0, 1])
+  plt.ylabel('True Positive Rate')
+  plt.xlabel('False Positive Rate')
+  plt.show()
+
+def PrCurve (predictions_Pandas):  
+  probs = predictions_Pandas['probability'].str[1]
+  y_test = predictions_Pandas['label']
+
+  # calculate model precision-recall curve
+  precision, recall, _ = precision_recall_curve(y_test, probs)
+  # plot the model precision-recall curve
+  plt.plot(recall, precision, marker='.', label='Random Forest')
+  # axis labels
+  plt.xlabel('Recall')
+  plt.ylabel('Precision')
+  # show the legend
+  plt.legend()
+  # show the plot
   plt.show()
   
 def plotRFperformance(summary_table, Param, title):
@@ -1720,7 +1757,23 @@ def RFmodelPipeline(train_set, test_set, numTreeList, maxDepthList, maxBins = 40
     
     RF_model = FitRFModel(train_set, numTrees = numTrees, maxDepth = maxDepth)
     
-    scoreandLabels, precision, recall, f1, accuracy = PredictandEvaluateModel (RF_model, test_set)
+    scoreandLabels, predictions_Pandas, precision, recall, f1, accuracy = PredictandEvaluateModel (RF_model, test_set)
+  
+    print('''Model Number: {}
+    NumTrees: {}
+    MaxDepth: {}
+    Precision: {}
+    Recall: {}
+    F1: {}
+    Accuracy: {}
+    '''.format(model_number, numTrees,maxDepth, precision, recall, f1, accuracy))
+    
+    #Produce Confusion Matrix and Roc Curve
+    CreateConfusion(scoreandLabels)
+    
+    RocCurve(predictions_Pandas)
+    
+    PrCurve(predictions_Pandas)
     
     summary_table.loc[model_number] = [numTrees,
                                       maxDepth,
@@ -1730,7 +1783,7 @@ def RFmodelPipeline(train_set, test_set, numTreeList, maxDepthList, maxBins = 40
                                       accuracy]
     
     model_number += 1
-    
+
   return summary_table, scoreandLabels
 
 # COMMAND ----------
@@ -1765,7 +1818,8 @@ plotRFperformance(summary_table.iloc[11:15].sort_values(by='MaxDepth'), 'MaxDept
 
 scoreandLabels = spark.read.option("header", "true").parquet(scoreandLabels_path)
 scoreandLabels = scoreandLabels.toPandas()
-
+predictions = spark.read.option("header", "true").parquet(predictions_path)
+predictions = predictions.toPandas()
 
 # COMMAND ----------
 
@@ -1774,22 +1828,40 @@ scoreandLabels = scoreandLabels.toPandas()
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ##### Confusions Matrix, ROC and PR curves
+
+# COMMAND ----------
+
 CreateConfusion(scoreandLabels)
 
 # COMMAND ----------
 
-# MAGIC %md Results:
+RocCurve(predictions)
+
+# COMMAND ----------
+
+PrCurve(predictions)
+
+# COMMAND ----------
+
+# MAGIC %md 
+# MAGIC ##### Results:
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC <img src ='https://github.com/RLashofRegas/mids-w261-final/blob/main/notebooks/Final_Mod_Results.png?raw=true'>
+# MAGIC <img src ='https://github.com/RLashofRegas/mids-w261-final/blob/main/notebooks/RF_Final_Results.png?raw=true'>
+# MAGIC 
+# MAGIC <img src ='https://github.com/RLashofRegas/mids-w261-final/blob/main/notebooks/AUC-PR.png?raw=true'>
 
 # COMMAND ----------
 
 # MAGIC %md 
 # MAGIC 
-# MAGIC We chose to optimize our model for recall given the nature of the business problem while maintaining reasonable accuracy as well. As seen in the confusion matrix, our focus on recall resulted in a sacrifice in precision. In terms of the original problem statement, when there is indeed a delayed flight, our model predicts that delay accurately 58% of the time. However, when our model predicts a delay, there is still a 55% chance that flight will not in fact be delayed. 
+# MAGIC We chose to optimize our model for recall given the nature of the business problem while maintaining reasonable accuracy as well. We managed this balance through our ratio of undersampling. As seen in the confusion matrix, our focus on recall resulted in a sacrifice in precision. In terms of the original problem statement, when there is indeed a delayed flight, our model predicts that delay accurately 57% of the time. However, when our model predicts a delay, there is still a 53% chance that flight will not in fact be delayed. 
+# MAGIC 
+# MAGIC From the ROC curve we see that our model performs better than a stochastic predictor but is far from a perfect predicter with an AUC of .77. The steep incline at the lefthand side of the curve indicates that performance increases rapidly at lower false positive rates and levels off when false positive rates are higher. The PR curve shows a similar story with an AUC of .53. The precision to recall is fairly linear, with mild improvement when recall is around .45.
 # MAGIC 
 # MAGIC The top ten most important features as determined by our model are shown below:
 # MAGIC 
