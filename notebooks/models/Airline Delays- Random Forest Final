@@ -17,10 +17,14 @@ from pyspark.sql.functions import col
 from pyspark.ml import Pipeline
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
+from pyspark.mllib.evaluation import BinaryClassificationMetrics
 import seaborn as sn
 import matplotlib.pyplot as plt
 import numpy as np
 from pyspark.sql.functions import col, explode, array, lit
+from sklearn import metrics
+from sklearn.metrics import roc_curve
+from sklearn.metrics import precision_recall_curve
 
 sqlContext = SQLContext(sc)
 
@@ -151,8 +155,10 @@ def PredictandEvaluateModel (RF_model, test_set):
   Prints Evaluation metrics and a confusion matrix and returns evaluation metrics'''
   
   predictions = RF_model.transform(test_set)
-  scoreAndLabels = predictions.select("prediction", "label")  
-  scoreAndLabelsPandas = scoreAndLabels.toPandas()
+  
+  #Convert to pandas for more comprehensive evaluation metrics
+  predictions_Pandas = predictions.select('label','probability', 'prediction').toPandas()
+  scoreAndLabelsPandas = predictions_pandas[["prediction", "label"]]  
   
   true_positive = scoreAndLabelsPandas[(scoreAndLabelsPandas.label == 1) & (scoreAndLabelsPandas.prediction == 1) ]['label'].count()
   true_negative = scoreAndLabelsPandas[(scoreAndLabelsPandas.label == 0) & (scoreAndLabelsPandas.prediction == 0)]['label'].count()
@@ -164,7 +170,7 @@ def PredictandEvaluateModel (RF_model, test_set):
   recall = true_positive / (false_negative + true_positive)
   f1 = (2 * precision * recall)/ (precision + recall)
 
-  return scoreAndLabelsPandas, precision, recall, f1, accuracy
+  return scoreAndLabelsPandas, predictions_Pandas,  precision, recall, f1, accuracy
   
   
 def CreateConfusion(scoreandLabels):
@@ -178,7 +184,42 @@ def CreateConfusion(scoreandLabels):
 
   plt.show()
   
+def RocCurve(predictions_Pandas):
 
+  # calculate the fpr and tpr for all thresholds of the classification
+  probs = predictions_Pandas['probability'].str[1]
+  y_test = predictions_Pandas['label']
+
+  fpr, tpr, threshold = metrics.roc_curve(y_test, probs, pos_label=1)
+  roc_auc = metrics.auc(fpr, tpr)
+
+  #Plot
+  plt.title('Receiver Operating Characteristic')
+  plt.plot(fpr, tpr, 'b', label = 'AUC = %0.2f' % roc_auc)
+  plt.legend(loc = 'lower right')
+  plt.plot([0, 1], [0, 1],'r--')
+  plt.xlim([0, 1])
+  plt.ylim([0, 1])
+  plt.ylabel('True Positive Rate')
+  plt.xlabel('False Positive Rate')
+  plt.show()
+
+def PrCurve (predictions_Pandas):  
+  probs = predictions_Pandas['probability'].str[1]
+  y_test = predictions_Pandas['label']
+
+  # calculate model precision-recall curve
+  precision, recall, _ = precision_recall_curve(y_test, probs)
+  # plot the model precision-recall curve
+  plt.plot(recall, precision, marker='.', label='Random Forest')
+  # axis labels
+  plt.xlabel('Recall')
+  plt.ylabel('Precision')
+  # show the legend
+  plt.legend()
+  # show the plot
+  plt.show()
+  
 def RFmodelPipeline(train_set, test_set, numTreeList, maxDepthList, maxBins = 400):
   '''Takes train and test set along with lists of number of trees and max depth
   to run iterative RF models on. Fits model on train, Predicts on test and prints 
@@ -193,7 +234,7 @@ def RFmodelPipeline(train_set, test_set, numTreeList, maxDepthList, maxBins = 40
     
     RF_model = FitRFModel(train_set, numTrees = numTrees, maxDepth = maxDepth)
     
-    scoreandLabels, precision, recall, f1, accuracy = PredictandEvaluateModel (RF_model, test_set)
+    scoreandLabels, predictions_Pandas, precision, recall, f1, accuracy = PredictandEvaluateModel (RF_model, test_set)
   
     print('''Model Number: {}
     NumTrees: {}
@@ -204,7 +245,12 @@ def RFmodelPipeline(train_set, test_set, numTreeList, maxDepthList, maxBins = 40
     Accuracy: {}
     '''.format(model_number, numTrees,maxDepth, precision, recall, f1, accuracy))
     
+    #Produce Confusion Matrix and Roc Curve
     CreateConfusion(scoreandLabels)
+    
+    RocCurve(predictions_Pandas)
+    
+    PrCurve (predictions_Pandas)
     
     summary_table.loc[model_number] = [numTrees,
                                       maxDepth,
@@ -220,15 +266,16 @@ def RFmodelPipeline(train_set, test_set, numTreeList, maxDepthList, maxBins = 40
 
 # COMMAND ----------
 
-summary_table, scoreandLabels = RFmodelPipeline(train_RF_US, test_RF, [30], [15])
+summary_table, scoreandLabels = RFmodelPipeline(train_RF_US, test_RF, [1], [1])
 
 
 # COMMAND ----------
 
-scoreandLabelsSpark = spark.createDataFrame(scoreandLabels)
-scoreandLabelsSpark.write.format("parquet").mode("overwrite").save(final_project_path + 'scoreandLabels.parquet')
-summary_table_spark = spark.createDataFrame(summary_table)
-summary_table_spark.write.format("csv").mode("overwrite").save(model_summary_path)
+#Run to save files
 
-# COMMAND ----------
-
+# scoreandLabelsSpark = spark.createDataFrame(scoreandLabels)
+# scoreandLabelsSpark.write.format("parquet").mode("overwrite").save(final_project_path + 'scoreandLabels.parquet')
+# summary_table_spark = spark.createDataFrame(summary_table)
+# summary_table_spark.write.format("csv").mode("overwrite").save(model_summary_path)
+#predictions = spark.createDataFrame(predictions_pandas)
+#predictions.write.format("parquet").mode("overwrite").save(final_project_path + 'predictions.parquet')
