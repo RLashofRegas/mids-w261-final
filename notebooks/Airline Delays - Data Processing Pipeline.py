@@ -65,6 +65,21 @@ city_timezone = spark.read.option("header", "false").csv(city_timezone_path) # t
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ### Train / Test Split
+# MAGIC 
+# MAGIC We provide here our method for train/test split to allow us to use it in our feature engineering and to make it easy to change if new data is added.
+
+# COMMAND ----------
+
+def filter_to_train(df):
+  return df.where((col("year") == '2015') | (col("year") == '2016') | (col("year") == '2017') | (col("year") == '2018'))
+
+def filter_to_test(df):
+  return df.where((col("year") == '2019'))
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ### Data Transformations
 
 # COMMAND ----------
@@ -456,6 +471,11 @@ weather.createOrReplaceTempView("weather")
 
 # COMMAND ----------
 
+airlines_train = filter_to_train(airlines)
+airlines_train.createOrReplaceTempView("airlines_train")
+
+# COMMAND ----------
+
 # Aggregate delays by airport (not time based)
 sqlContext.sql("""
 DROP VIEW IF EXISTS delays_by_airport_total
@@ -473,7 +493,7 @@ SELECT
   IFNULL(AVG(nas_delay), 0) AS avg_nas_delay,
   IFNULL(AVG(security_delay), 0) AS avg_security_delay,
   IFNULL(AVG(late_aircraft_delay), 0) AS avg_late_aircraft_delay
-FROM airlines AS a
+FROM airlines_train AS a
 GROUP BY
   a.origin
 """)
@@ -847,8 +867,8 @@ weather_airline_joined = spark.read.option("header", "true").parquet(weather_air
 cached_join = weather_airline_joined.cache()
 
 # perform train/test split based on year
-train_set = cached_join.where((col("year") == '2015') | (col("year") == '2016') | (col("year") == '2017') | (col("year") == '2018')).cache()
-test_set = cached_join.where((col("year") == '2019')).cache()
+train_set = filter_to_train(cached_join).cache()
+test_set = filter_to_test(cached_join).cache()
 
 # COMMAND ----------
 
